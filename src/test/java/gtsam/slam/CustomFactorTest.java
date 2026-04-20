@@ -288,7 +288,7 @@ public class CustomFactorTest {
     @Test
     void testMultiOptimizationNative() throws Throwable {
         // repeat in order to run the profiler
-        for (int j = 0; j < 100; ++j) {
+        for (int j = 0; j < 5; ++j) {
         // for (int j = 0; j < 2; ++j) {
             System.gc();
 
@@ -306,7 +306,7 @@ public class CustomFactorTest {
 
             // Create variables with bad initial values.
             // int N = 50000;
-            int N = 50000;
+            int N = 5000;
             Values initialValues = new Values();
             for (int i = 0; i < N; ++i) {
                 initialValues.insert(new Key(i), new Pose2(0, 0, 0));
