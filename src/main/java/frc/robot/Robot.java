@@ -1,20 +1,23 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
-import gtsam.Point2;
 
 public class Robot extends TimedRobot {
 
+    private final Sim sim;
+
     public Robot() {
+        sim = Sim.make();
     }
 
     @Override
     public void teleopPeriodic() {
-        try {
-            Point2 p = new Point2(4, 5);
-            p.print();
-        } catch (Throwable e) {
-            e.printStackTrace();
+        if (sim != null) {
+            try {
+                sim.run();
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
         }
     }
 }
