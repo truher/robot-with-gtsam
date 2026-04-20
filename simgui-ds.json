@@ -42,14 +42,14 @@
       ],
       "povConfig": [
         {
-          "key0": 328,
-          "key135": 323,
-          "key180": 322,
-          "key225": 321,
-          "key270": 324,
-          "key315": 327,
-          "key45": 329,
-          "key90": 326
+          "keyDown": 322,
+          "keyDownLeft": 321,
+          "keyDownRight": 323,
+          "keyLeft": 324,
+          "keyRight": 326,
+          "keyUp": 328,
+          "keyUpLeft": 327,
+          "keyUpRight": 329
         }
       ],
       "povCount": 1
