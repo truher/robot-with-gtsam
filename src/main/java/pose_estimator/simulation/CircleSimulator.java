@@ -1,8 +1,10 @@
 package pose_estimator.simulation;
 
 import java.util.List;
+import java.util.Random;
 
 import config.CameraConfig;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import field.FieldMap;
 import gtsam.Cal3DS2;
 import gtsam.PinholeCamera;
@@ -10,6 +12,7 @@ import gtsam.Point2;
 import gtsam.Point3;
 import gtsam.Pose2;
 import gtsam.Pose3;
+import gtsam.Vector3;
 import kinodynamics.Odometry;
 import kinodynamics.Odometry.PointR2;
 import kinodynamics.Odometry.Twist2d;
@@ -25,6 +28,8 @@ public class CircleSimulator {
     static double PAN_PERIOD_S = PATH_PERIOD_S / 3;
     // maximum pan angle, radians
     static double PAN_SCALE_RAD = 1.0;
+
+    static Random RANDOM = new Random(42);
 
     final FieldMap fieldMap;
     final Odometry.SwerveDriveKinematics100 kinematics;
@@ -106,7 +111,12 @@ public class CircleSimulator {
 
         // Find the wheel positions.
         Pose2 new_wpi_pose = new Pose2(gt_x, gt_y, gt_theta);
-        Twist2d twist = Twist2d.fromVector(wpi_pose.log(new_wpi_pose));
+        Vector3 twistVector = wpi_pose.logmap(new_wpi_pose);
+        Vector3 twistNoise = new Vector3(
+                RANDOM.nextGaussian(0, 0.01),
+                RANDOM.nextGaussian(0, 0.01),
+                RANDOM.nextGaussian(0, 0.01));
+        Twist2d twist = Twist2d.fromVector(twistVector.plus(twistNoise));
         wpi_pose = new_wpi_pose;
         positions = kinematics.to_swerve_module_positions(positions, twist);
 
@@ -136,6 +146,15 @@ public class CircleSimulator {
                 robot_pose,
                 camera_offset,
                 calib);
+        SmartDashboard.putNumber("p0 x", p0.x());
+        SmartDashboard.putNumber("p0 y", p0.y());
+        SmartDashboard.putNumber("p1 x", p1.x());
+        SmartDashboard.putNumber("p1 y", p1.y());
+        SmartDashboard.putNumber("p2 x", p2.x());
+        SmartDashboard.putNumber("p2 y", p2.y());
+        SmartDashboard.putNumber("p3 x", p3.x());
+        SmartDashboard.putNumber("p3 y", p3.y());
+
         gt_pixels = List.of(p0, p1, p2, p3);
 
         // omit out-of-frame tags
@@ -159,6 +178,9 @@ public class CircleSimulator {
         Pose3 camera_pose = new Pose3(robot_pose).compose(camera_offset);
         PinholeCamera<Cal3DS2> camera = PinholeCamera.PinholeCameraCal3DS2(
                 camera_pose, calib);
-        return camera.project(landmark);
+        Point2 pxNoise = new Point2(
+                RANDOM.nextGaussian(0, 1),
+                RANDOM.nextGaussian(0, 1));
+        return camera.project(landmark).plus(pxNoise);
     }
 }

@@ -2,6 +2,26 @@
 
 This is a robot project that demonstrates usage of the GTSAM vendordep.
 
+It simulates a robot moving around, and uses GTSAM to localize it.
+
+There are three inputs:
+
+* A single camera and one April Tag. the camera can usually, but not always,
+  see the tag.  Each corner of the tag is handled with a separate factor.
+* Odometry measurements at each wheel.  These are turned into a single
+  "twist" measurement, used by a "Between" factor.
+* A gyro, currently modeled as a prior.  This should be changed to the new
+  "between" type.
+
+There are several items plotted on Field2d:
+
+* The (fixed, not uncertain) tag position.
+* The robot ground-truth pose (used to compute the camera/odometry/gyro inputs).
+* The "mean" pose estimate from GTSAM.
+
+
+## Building
+
 If you've built the gtsam-vendordep locally, then the artifacts will be in $HOME/releases/maven.
 
 To use them here, copy to the wpilib maven, e.g.:

@@ -20,12 +20,12 @@ import gtsam.NonlinearFactorGraph;
 import gtsam.Pair;
 import gtsam.Pose2;
 import gtsam.PriorFactor;
-import gtsam.SharedNoiseModel;
-import gtsam.TangentVector;
 import gtsam.Values;
 import gtsam.Vector;
 import gtsam.Vector3;
 import gtsam.shared_ptr;
+import gtsam.noiseModel.Diagonal;
+import gtsam.noiseModel.Unit;
 import util.TestUtil;
 
 /** See python/gtsam/tests/test_custom_factor.py */
@@ -41,7 +41,7 @@ public class CustomFactorTest {
                 return new Vector(new double[] { 1, 0, 0 });
             }
         };
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
         KeyVector keys = new KeyVector(new Key(0));
         shared_ptr<CustomFactor> cf = CustomFactor.newCustomFactor(noise_model, keys, error_func);
     }
@@ -55,11 +55,11 @@ public class CustomFactorTest {
             @Override
             public Vector apply(CustomFactor factor, Values v, JacobianVector H) throws Throwable {
                 Key key0 = factor.keys().at(0);
-                TangentVector error = v.atPose2(key0).localCoordinates(expected_pose).unaryMinus();
+                Vector3 error = v.atPose2(key0).local(expected_pose).times(-1);
                 return new Vector(error);
             }
         };
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
         KeyVector keys = new KeyVector(new Key(0));
         shared_ptr<CustomFactor> cf = CustomFactor.newCustomFactor(noise_model, keys, error_func);
         Values v = new Values();
@@ -86,16 +86,16 @@ public class CustomFactorTest {
                 Key key1 = factor.keys().at(1);
                 Pose2 gT1 = v.atPose2(key0);
                 Pose2 gT2 = v.atPose2(key1);
-                Vector error = new Vector(expected.localCoordinates(gT1.between(gT2)));
+                Vector error = new Vector(expected.local(gT1.between(gT2)));
                 if (H != null) {
                     Pose2 result = gT1.between(gT2);
-                    H.insert(0, result.inverse().AdjointMap().unaryMinus());
+                    H.insert(0, result.inverse().AdjointMap().times(-1));
                     H.insert(1, Matrix3.identity());
                 }
                 return error;
             }
         };
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
         KeyVector keys = new KeyVector(new Key(0), new Key(1));
         shared_ptr<CustomFactor> cf = CustomFactor.newCustomFactor(noise_model, keys, error_func);
         Values v = new Values();
@@ -139,13 +139,13 @@ public class CustomFactorTest {
                 Key key1 = factor.keys().at(1);
                 Pose2 gT1 = v.atPose2(key0);
                 Pose2 gT2 = v.atPose2(key1);
-                Vector error = new Vector(expected.localCoordinates(gT1.between(gT2)));
+                Vector error = new Vector(expected.local(gT1.between(gT2)));
                 assertNull(H);// Should be null if we only request the error
                 return error;
             }
         };
 
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
         KeyVector keys = new KeyVector(new Key(0), new Key(1));
         shared_ptr<CustomFactor> cf = CustomFactor.newCustomFactor(noise_model, keys, error_func);
         Values v = new Values();
@@ -180,16 +180,16 @@ public class CustomFactorTest {
                 Key key1 = factor.keys().at(1);
                 Pose2 gT1 = v.atPose2(key0);
                 Pose2 gT2 = v.atPose2(key1);
-                Vector error = new Vector(expected.localCoordinates(gT1.between(gT2)));
+                Vector error = new Vector(expected.local(gT1.between(gT2)));
                 if (H != null) {
                     Pose2 result = gT1.between(gT2);
-                    H.insert(0, result.inverse().AdjointMap().unaryMinus());
+                    H.insert(0, result.inverse().AdjointMap().times(-1));
                     H.insert(1, Matrix3.identity());
                 }
                 return error;
             }
         };
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
         KeyVector keys = new KeyVector(new Key(0), new Key(1));
         shared_ptr<CustomFactor> cf = CustomFactor.newCustomFactor(
                 noise_model, keys, error_func);
@@ -220,7 +220,7 @@ public class CustomFactorTest {
      */
     @Test
     void testMultiOptimization() throws Throwable {
-        SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+        shared_ptr<Unit> noise_model = Unit.Create(3);
 
         // Expectation is always the same: each pose steps 1m +x.
         Pose2 expected = new Pose2(1, 0, 0);
@@ -230,7 +230,7 @@ public class CustomFactorTest {
         factorGraph.add(PriorFactor.PriorFactorPose2(
                 new Key(0),
                 new Pose2(),
-                SharedNoiseModel.Sigmas(new Vector3(0.001, 0.001, 0.001))));
+                Diagonal.Sigmas(new Vector3(0.001, 0.001, 0.001))));
 
         // Create variables with bad initial values.
         int N = 10000;
@@ -246,9 +246,9 @@ public class CustomFactorTest {
                         Pose2 gT1 = v.atPose2(factor.keys().at(0));
                         Pose2 gT2 = v.atPose2(factor.keys().at(1));
                         Pose2 between = gT1.between(gT2);
-                        Vector error = new Vector(expected.localCoordinates(between));
+                        Vector error = new Vector(expected.local(between));
                         if (H != null) {
-                            H.insert(0, between.inverse().AdjointMap().unaryMinus());
+                            H.insert(0, between.inverse().AdjointMap().times(-1));
                             H.insert(1, Matrix3.identity());
                         }
                         return error;
@@ -289,10 +289,10 @@ public class CustomFactorTest {
     void testMultiOptimizationNative() throws Throwable {
         // repeat in order to run the profiler
         for (int j = 0; j < 5; ++j) {
-        // for (int j = 0; j < 2; ++j) {
+            // for (int j = 0; j < 2; ++j) {
             System.gc();
 
-            SharedNoiseModel noise_model = SharedNoiseModel.Unit(3);
+            shared_ptr<Unit> noise_model = Unit.Create(3);
 
             // Expectation is always the same: each pose steps 1m +x.
             Pose2 expected = new Pose2(1, 0, 0);
@@ -302,7 +302,7 @@ public class CustomFactorTest {
             factorGraph.add(PriorFactor.PriorFactorPose2(
                     new Key(0),
                     new Pose2(),
-                    SharedNoiseModel.Sigmas(new Vector3(0.001, 0.001, 0.001))));
+                    Diagonal.Sigmas(new Vector3(0.001, 0.001, 0.001))));
 
             // Create variables with bad initial values.
             // int N = 50000;

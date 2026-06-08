@@ -1,7 +1,7 @@
 {
     "fileName": "gtsam-vendordep.json",
     "name": "GTSAM Vendor Dependency",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "frcYear": "2027_alpha1",
     "uuid": "cd883302-12b7-4fb5-8831-4b4c7337d0b7",
     "mavenUrls": [
@@ -12,22 +12,24 @@
         {
             "groupId": "org.team100.gtsam-vendordep",
             "artifactId": "gtsam-vendordep-java",
-            "version": "0.0.3"
+            "version": "0.0.4"
         }
     ],
     "jniDependencies": [
         {
             "groupId": "org.team100.gtsam-vendordep",
             "artifactId": "gtsam-vendordep-driver",
-            "version": "0.0.3",
+            "version": "0.0.4",
             "skipInvalidPlatforms": true,
             "isJar": false,
-            "validPlatforms": [
+            "validPlatformsOLD": [
                 "linuxx86-64",
                 "linuxsystemcore"
+            ],
+            "validPlatforms": [
+                "linuxx86-64"
             ]
         }
     ],
-    "cppDependencies": [
-    ]
+    "cppDependencies": []
 }

@@ -17,23 +17,25 @@ import gtsam.Pose2;
 import gtsam.Pose3;
 import gtsam.PoseRotationPrior;
 import gtsam.PriorFactor;
-import gtsam.SharedNoiseModel;
 import gtsam.Values;
 import gtsam.Vector;
 import gtsam.Vector1;
 import gtsam.Vector2;
 import gtsam.Vector3;
+import gtsam.shared_ptr;
+import gtsam.noiseModel.Base;
+import gtsam.noiseModel.Diagonal;
 import kinodynamics.DriveUtil;
 import kinodynamics.Odometry;
 import kinodynamics.Odometry.PointR2;
 
 /** Port of estimate.py from 2024. */
 public class Estimate {
-    SharedNoiseModel PRIOR_NOISE = SharedNoiseModel.Sigmas(
+    shared_ptr<Diagonal> PRIOR_NOISE = Diagonal.Sigmas(
             new Vector3(160, 80, 60));
     Pose2 PRIOR_MEAN = new Pose2(8, 4, 0);
-    SharedNoiseModel GYRO_NOISE = SharedNoiseModel.Sigmas(
-            new Vector1(0.001));
+    shared_ptr<Diagonal> GYRO_NOISE = Diagonal.Sigmas(
+            new Vector1(0.01));
 
     private final BatchFixedLagSmoother isam;
     Values result;
@@ -48,7 +50,7 @@ public class Estimate {
     long odo_dt = 0;
 
     Pose2 default_prior;
-    SharedNoiseModel default_prior_noise;
+    shared_ptr<? extends Base> default_prior_noise;
     Odometry.Twist2d measurement = new Odometry.Twist2d();
 
     /** @param lag in microseconds, not seconds as in python */
@@ -83,7 +85,7 @@ public class Estimate {
 
         // for when we make a state but don't have any odometry for it
         default_prior = new Pose2(0, 0, 0);
-        default_prior_noise = SharedNoiseModel.Sigmas(new Vector3(10, 10, 10));
+        default_prior_noise = Diagonal.Sigmas(new Vector3(10, 10, 10));
 
     }
 
@@ -124,7 +126,7 @@ public class Estimate {
     public void prior(
             long time_us,
             Pose2 value,
-            SharedNoiseModel noise) throws Throwable {
+            shared_ptr<? extends Base> noise) throws Throwable {
 
         new_factors.add(
                 PriorFactor.PriorFactorPose2(
@@ -146,7 +148,7 @@ public class Estimate {
     public void odometry(
             long t1_us,
             Odometry.SwerveModulePositions newPositions,
-            SharedNoiseModel noise) throws Throwable {
+            shared_ptr<? extends Base> noise) throws Throwable {
 
         // each odometry update maps exactly to a "between" factor
         // remember a "twist" is a robot-relative concept
@@ -171,7 +173,7 @@ public class Estimate {
         Odometry.Twist2d measurement = kinematics.to_twist_2d(deltas);
         odo_dt = t1_us - t0_us;
         // print("add odometry factor ", t0_us, t1_us, self.measurement)
-        Pose2 gp = Pose2.Expmap(new Vector3(
+        Pose2 gp = new Pose2().expmap(new Vector3(
                 measurement.x(),
                 measurement.y(),
                 measurement.theta()));
@@ -215,8 +217,8 @@ public class Estimate {
         for (int i = 0; i < landmarks.size(); ++i) {
             Point3 landmark = landmarks.get(i);
             Point2 px = measured.get(i);
-            SharedNoiseModel noise = SharedNoiseModel.Sigmas(
-                    new Vector2(1, 1));
+            shared_ptr<Diagonal> noise = Diagonal.Sigmas(
+                    new Vector2(5, 5));
             new_factors.add(
                     PlanarProjectionFactor1.newPlanarProjectionFactor1(
                             Key.X(t0_us),
@@ -259,6 +261,7 @@ public class Estimate {
         return result.size();
     }
 
+    /** The mean expected pose. */
     public Pose2 mean_pose2(Key key) throws Throwable {
         return result.atPose2(key);
     }
@@ -272,6 +275,13 @@ public class Estimate {
     public Marginals marginal_covariance() throws Throwable {
         NonlinearFactorGraph factors = isam.getFactors();
         return new Marginals(factors, result);
+    }
+
+    public Pose2 sample_Pose2(Key key) throws Throwable {
+        Marginals marginals = marginal_covariance();
+        Matrix cov = marginals.marginalCovariance(key);
+        Vector3 t = new Vector3(cov.draw());
+        return mean_pose2(key).expmap(t);
     }
 
 }
