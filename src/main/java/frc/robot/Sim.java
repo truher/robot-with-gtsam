@@ -19,25 +19,58 @@ import pose_estimator.Estimate;
 import pose_estimator.simulation.CircleSimulator;
 import util.Stats;
 
+/**
+ * Outer simulation loop.  Call "run" periodically.
+ */
 public class Sim {
-    private static final boolean ESTIMATE = true;
-
     private final CircleSimulator sim;
     private final Estimate est;
     private final shared_ptr<? extends Base> odometry_noise;
     private final Stats etStats;
     private final Stats sizeStats;
     private final Field2d m_field;
+    private final boolean initialized;
 
     private Pose2 state;
-    private int i;
+    private int loopCount;
 
-    public Sim(
-            Field2d field,
-            CircleSimulator sim,
-            Estimate est,
-            shared_ptr<? extends Base> odometry_noise,
-            Pose2 state) {
+    public Sim() {
+
+        CircleSimulator sim = null;
+        Estimate est = null;
+        shared_ptr<Diagonal> odometry_noise = null;
+        Pose2 state = null;
+        boolean initialized = false;
+
+        Field2d field = null;
+
+        try {
+            FieldMap fieldMap = new FieldMap();
+            // TODO: correct tag location
+            field = new Field2d();
+            field.getObject("tag0").setPose(new Pose2d(8, 4, new Rotation2d(0)));
+            sim = new CircleSimulator(fieldMap);
+            int lagMicroseconds = 100000;
+            est = new Estimate(lagMicroseconds);
+
+            Pose2 prior_mean = new Pose2(0, 0, 0);
+            est.add_state(0, prior_mean);
+            est.prior(0, prior_mean, Diagonal.Sigmas(
+                    new Vector3(100, 100, 100)));
+
+            /** TODO: make odometry noise speed-dependent (not this constant). */
+            odometry_noise = Diagonal.Sigmas(
+                    new Vector3(0.02, 0.02, 0.05));
+            // this should just record the positions and timestamp
+            est.odometry(0, sim.positions(), odometry_noise);
+
+            state = new Pose2();
+            initialized = true;
+
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+
         this.sim = sim;
         this.est = est;
         this.odometry_noise = odometry_noise;
@@ -45,82 +78,51 @@ public class Sim {
         m_field = field;
         etStats = new Stats();
         sizeStats = new Stats();
-        i = 1;
+        loopCount = 1;
 
         SmartDashboard.putData("Field", m_field);
-        // Do this in either robot periodic or subsystem periodic
+        this.initialized = initialized;
+        // TODO: is this needed?
+        run();
     }
 
-    public static Sim make() {
-        if (!ESTIMATE)
-            return null;
-        try {
-
-            FieldMap fieldMap = new FieldMap();
-            // TODO: correct tag location
-            Field2d field = new Field2d();
-            field.getObject("tag0").setPose(new Pose2d(8, 4, new Rotation2d(0)));
-            CircleSimulator sim = new CircleSimulator(fieldMap);
-            int lagMicroseconds = 1000000;
-            Estimate est = new Estimate(lagMicroseconds);
-            est.init();
-
-            Pose2 prior_mean = new Pose2(0, 0, 0);
-            est.add_state(0, prior_mean);
-            est.prior(0, prior_mean, Diagonal.Sigmas(
-                    new Vector3(100, 100, 100)));
-
-            shared_ptr<Diagonal> odometry_noise = Diagonal.Sigmas(
-                    new Vector3(0.02, 0.02, 0.05));
-            // this should just record the positions and timestamp
-            est.odometry(0, sim.positions, odometry_noise);
-
-            Pose2 state = new Pose2();
-
-            return new Sim(field, sim, est, odometry_noise, state);
-        } catch (Throwable e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public void run() throws Throwable {
-        if (!ESTIMATE)
+    public void run() {
+        if (!initialized)
             return;
-        SmartDashboard.putNumber("i", i);
+        try {
+            SmartDashboard.putNumber("i", loopCount);
 
-        long t0_ns = System.nanoTime();
+            long t0_ns = System.nanoTime();
 
-        long t1_us = 20000 * i;
+            long t1_us = 20000 * loopCount;
 
-        /////////////////////////////////////////////////
-        //
-        // SIMULATE
-        //
-        // Update ground truth.
-        sim.step(0.02);
-        double gt_x = sim.gt_x;
-        double gt_y = sim.gt_y;
-        double gt_theta = sim.gt_theta;
-        Pose2d gtPose2d = new Pose2d(gt_x, gt_y, new Rotation2d(gt_theta));
-        m_field.getObject("gt").setPose(gtPose2d);
+            //////////////////////////////////////////
+            //
+            // SIMULATE
+            //
+            // Update ground truth.
+            sim.step(0.02);
+            double gt_x = sim.gt_x;
+            double gt_y = sim.gt_y;
+            double gt_theta = sim.gt_theta;
+            Pose2d gtPose2d = new Pose2d(gt_x, gt_y, new Rotation2d(gt_theta));
+            m_field.getObject("gt").setPose(gtPose2d);
 
-        /////////////////////////////////////////////////
-        //
-        // ESTIMATE
-        //
+            //////////////////////////////////////////
+            //
+            // ESTIMATE
+            //
 
-        if (ESTIMATE) {
             // Add the initial estimate of pose.
             est.add_state(t1_us, state);
             //
-            est.odometry(t1_us, sim.positions, odometry_noise);
+            est.odometry(t1_us, sim.positions(), odometry_noise);
             est.gyro(t1_us, sim.gt_theta);
             int pixelsInView = sim.gt_pixels.size();
             SmartDashboard.putNumber("pixels in view", pixelsInView);
             if (pixelsInView > 0) {
                 est.apriltag_for_smoothing_batch(
-                        sim.landmarks, sim.gt_pixels, t1_us, sim.camera_offset, sim.calib);
+                        sim.landmarks, sim.gt_pixels, t1_us, sim.camera_offset, sim.calib());
             }
             est.update();
             long t1_ns = System.nanoTime();
@@ -163,9 +165,10 @@ public class Sim {
             FieldObject2d o = m_field.getObject("samples");
             o.setPoses(samples);
 
+            ++loopCount;
+        } catch (Throwable e) {
+            e.printStackTrace();
         }
-
-        ++i;
     }
 
     Pose2d toPose2d(Pose2 p) throws Throwable {

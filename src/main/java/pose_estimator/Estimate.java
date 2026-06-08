@@ -29,25 +29,24 @@ import kinodynamics.DriveUtil;
 import kinodynamics.Odometry;
 import kinodynamics.Odometry.PointR2;
 
-/** Port of estimate.py from 2024. */
+/**
+ * Port of estimate.py from 2024.
+ */
 public class Estimate {
-    shared_ptr<Diagonal> PRIOR_NOISE = Diagonal.Sigmas(
-            new Vector3(160, 80, 60));
-    Pose2 PRIOR_MEAN = new Pose2(8, 4, 0);
-    shared_ptr<Diagonal> GYRO_NOISE = Diagonal.Sigmas(
-            new Vector1(0.01));
-
+    private final shared_ptr<Diagonal> PRIOR_NOISE;
+    private final Pose2 PRIOR_MEAN;
+    private final shared_ptr<Diagonal> GYRO_NOISE;
     private final BatchFixedLagSmoother isam;
-    Values result;
     private final NonlinearFactorGraph new_factors;
     private final Values new_values;
     /** key is Key, "X(timestamp in us)", value is timestamp in us */
     private final FixedLagSmoother.KeyTimestampMap new_timestamps;
-    final Odometry.SwerveDriveKinematics100 kinematics;
-    public Odometry.SwerveModulePositions positions;
+    private final Odometry.SwerveDriveKinematics100 kinematics;
+
+    private Odometry.SwerveModulePositions positions;
+    private Values result;
 
     Long odo_t = null;
-    long odo_dt = 0;
 
     Pose2 default_prior;
     shared_ptr<? extends Base> default_prior_noise;
@@ -55,6 +54,11 @@ public class Estimate {
 
     /** @param lag in microseconds, not seconds as in python */
     public Estimate(double lag) throws Throwable {
+        PRIOR_NOISE = Diagonal.Sigmas(
+                new Vector3(160, 80, 60));
+        PRIOR_MEAN = new Pose2(8, 4, 0);
+        GYRO_NOISE = Diagonal.Sigmas(
+                new Vector1(0.01));
         // Initialize the model
         // initial module positions are at their origins.
         // TODO: some other initial positions?
@@ -87,10 +91,6 @@ public class Estimate {
         default_prior = new Pose2(0, 0, 0);
         default_prior_noise = Diagonal.Sigmas(new Vector3(10, 10, 10));
 
-    }
-
-    public void init() {
-        //
     }
 
     /**
@@ -144,6 +144,9 @@ public class Estimate {
      * 
      * t0_us, t1_us: network tables timestamp in integer microseconds.
      * TODO: something more clever with timestamps
+     * 
+     * TODO: noise should be speed dependent: when not moving, noise is very low,
+     * and when moving fast, noise is much higher.
      */
     public void odometry(
             long t1_us,
@@ -171,7 +174,6 @@ public class Estimate {
                 this.positions, newPositions);
         // this is the tangent-space (twist) measurement
         Odometry.Twist2d measurement = kinematics.to_twist_2d(deltas);
-        odo_dt = t1_us - t0_us;
         // print("add odometry factor ", t0_us, t1_us, self.measurement)
         Pose2 gp = new Pose2().expmap(new Vector3(
                 measurement.x(),

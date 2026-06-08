@@ -25,7 +25,17 @@ public class FieldMap {
         tags.put(1, FieldMap.make_tag(2, 2, 1, Math.PI / 2));
     }
 
-    /** list of corners */
+    /**
+     * list of corners
+     *
+     * the order is the same as the detector getCorners order
+     *
+     * lower left
+     * lower right
+     * upper right
+     * upper left
+     * 
+     */
     public List<Point3> get(int tag_id) {
         return tags.get(tag_id);
     }

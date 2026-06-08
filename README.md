@@ -19,6 +19,11 @@ There are several items plotted on Field2d:
 * The robot ground-truth pose (used to compute the camera/odometry/gyro inputs).
 * The "mean" pose estimate from GTSAM.
 
+## Details
+
+The outer loop is handled by `Sim`, which steps the `CircleSimulator`
+once per run, and then runs the `Estimate` solver.
+
 
 ## Building
 

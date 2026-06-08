@@ -18,47 +18,42 @@ import kinodynamics.Odometry.PointR2;
 import kinodynamics.Odometry.Twist2d;
 
 /**
+ * Moves the robot around and maintains ground truth measurements of it.
+ * 
+ * Also projects the landmarks through the simulated camera to derive (ideal)
+ * pixel measurements.
+ * 
  * see pose_estimator/simulation/circle_simulator.py in all24
  */
 public class CircleSimulator {
-    static double PATH_CENTER_X_M = 4;
-    static double PATH_CENTER_Y_M = 4;
-    static double PATH_RADIUS_M = 1;
-    static double PATH_PERIOD_S = 2.0 * Math.PI;
-    static double PAN_PERIOD_S = PATH_PERIOD_S / 3;
+    private static double PATH_CENTER_X_M = 4;
+    private static double PATH_CENTER_Y_M = 4;
+    private static double PATH_RADIUS_M = 1;
+    private static double PATH_PERIOD_S = 2.0 * Math.PI;
+    private static double PAN_PERIOD_S = PATH_PERIOD_S / 3;
     // maximum pan angle, radians
-    static double PAN_SCALE_RAD = 1.0;
+    private static double PAN_SCALE_RAD = 1.0;
+    private static Random RANDOM = new Random(42);
 
-    static Random RANDOM = new Random(42);
+    private final Odometry.SwerveDriveKinematics100 kinematics;
+    private final Cal3DS2 calib;
 
-    final FieldMap fieldMap;
-    final Odometry.SwerveDriveKinematics100 kinematics;
-    public Odometry.SwerveModulePositions positions;
-    Pose2 wpi_pose = new Pose2(PATH_CENTER_X_M + PATH_RADIUS_M, 0, 0);
+    public final Pose3 camera_offset;
+    private Odometry.SwerveModulePositions positions;
+    private Pose2 wpi_pose = new Pose2(PATH_CENTER_X_M + PATH_RADIUS_M, 0, 0);
 
-    double time_s = 0;
+    // current time, incremented with each call to step().
+    private double time_s = 0;
+
     public double gt_x;
     public double gt_y;
     public double gt_theta;
 
-    // the order is the same as the detector getCorners order
-    // lower left
-    // lower right
-    // upper right
-    // upper left
-    public List<Point2> gt_pixels;
 
-    Point3 l0;
-    Point3 l1;
-    Point3 l2;
-    Point3 l3;
+    public List<Point2> gt_pixels;
     public List<Point3> landmarks;
-    public Pose3 camera_offset;
-    public Cal3DS2 calib;
 
     public CircleSimulator(FieldMap fieldMap) throws Throwable {
-        this.fieldMap = fieldMap;
-
         kinematics = new Odometry.SwerveDriveKinematics100(
                 List.of(
                         new PointR2(0.5, 0.5),
@@ -75,19 +70,11 @@ public class CircleSimulator {
                 new Odometry.SwerveModulePosition100(
                         0, new Odometry.RotR2(1, 0)));
 
-        // cheating the initial pose
-        // TODO: more clever init
-        Pose2 wpi_pose = new Pose2(PATH_CENTER_X_M + PATH_RADIUS_M, 0, 0);
-
         // constant landmark points
         // tag zero is at (3, 0, 1)
         List<Point3> tag = fieldMap.get(0);
 
-        l0 = tag.get(0);
-        l1 = tag.get(1);
-        l2 = tag.get(2);
-        l3 = tag.get(3);
-        landmarks = List.of(l0, l1, l2, l3);
+        landmarks = List.of(tag.get(3), tag.get(1), tag.get(2), tag.get(3));
 
         CameraConfig cam = new CameraConfig();
         camera_offset = cam.camera_offset;
@@ -113,9 +100,9 @@ public class CircleSimulator {
         Pose2 new_wpi_pose = new Pose2(gt_x, gt_y, gt_theta);
         Vector3 twistVector = wpi_pose.logmap(new_wpi_pose);
         Vector3 twistNoise = new Vector3(
-                RANDOM.nextGaussian(0, 0.01),
-                RANDOM.nextGaussian(0, 0.01),
-                RANDOM.nextGaussian(0, 0.01));
+                twistVector.at(0) * RANDOM.nextGaussian(0, 0.01),
+                twistVector.at(1) * RANDOM.nextGaussian(0, 0.01),
+                twistVector.at(2) * RANDOM.nextGaussian(0, 0.01));
         Twist2d twist = Twist2d.fromVector(twistVector.plus(twistNoise));
         wpi_pose = new_wpi_pose;
         positions = kinematics.to_swerve_module_positions(positions, twist);
@@ -124,36 +111,28 @@ public class CircleSimulator {
 
         // lower left
         Point2 p0 = _px(
-                l0,
+                landmarks.get(0),
                 robot_pose,
                 camera_offset,
                 calib);
         // lower right
         Point2 p1 = _px(
-                l1,
+                landmarks.get(1),
                 robot_pose,
                 camera_offset,
                 calib);
         // upper right
         Point2 p2 = _px(
-                l2,
+                landmarks.get(2),
                 robot_pose,
                 camera_offset,
                 calib);
         // upper left
         Point2 p3 = _px(
-                l3,
+                landmarks.get(3),
                 robot_pose,
                 camera_offset,
                 calib);
-        SmartDashboard.putNumber("p0 x", p0.x());
-        SmartDashboard.putNumber("p0 y", p0.y());
-        SmartDashboard.putNumber("p1 x", p1.x());
-        SmartDashboard.putNumber("p1 y", p1.y());
-        SmartDashboard.putNumber("p2 x", p2.x());
-        SmartDashboard.putNumber("p2 y", p2.y());
-        SmartDashboard.putNumber("p3 x", p3.x());
-        SmartDashboard.putNumber("p3 y", p3.y());
 
         gt_pixels = List.of(p0, p1, p2, p3);
 
@@ -161,8 +140,11 @@ public class CircleSimulator {
         for (Point2 p : gt_pixels) {
             double x = p.x();
             double y = p.y();
-            if (x < 0 || y < 0 || x > 800 || y > 600)
+            if (x < 0 || y < 0 || x > 800 || y > 600) {
+                // any corner out of frame means the whole tag is not seen
                 gt_pixels = List.of();
+                break;
+            }
         }
     }
 
@@ -183,4 +165,13 @@ public class CircleSimulator {
                 RANDOM.nextGaussian(0, 1));
         return camera.project(landmark).plus(pxNoise);
     }
+
+    public Odometry.SwerveModulePositions positions() {
+        return positions;
+    }
+
+    public Cal3DS2 calib() {
+        return calib;
+    }
+
 }
