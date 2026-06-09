@@ -8,17 +8,15 @@ import gtsam.Matrix;
 import gtsam.NonlinearFactor;
 import gtsam.NonlinearFactorGraph;
 import gtsam.Pose2;
-import gtsam.PriorFactor;
 import gtsam.Values;
 import gtsam.Vector;
 import gtsam.Vector3;
 import gtsam.shared_ptr;
-import gtsam.noiseModel.Base;
 
 /**
  * Port of estimate.py from 2024.
  */
-public class Estimate {
+public class Solver {
     private final BatchFixedLagSmoother isam;
     private final NonlinearFactorGraph new_factors;
     private final Values new_values;
@@ -28,7 +26,7 @@ public class Estimate {
     private Values result;
 
     /** @param lag in microseconds, not seconds as in python */
-    public Estimate(double lag) throws Throwable {
+    public Solver(double lag) throws Throwable {
 
         // Initialize the model
         // initial module positions are at their origins.
@@ -65,20 +63,6 @@ public class Estimate {
         // TODO: use the previous pose as the initial value
         new_values.insert(key, initial_value);
         new_timestamps.put(key, time_us);
-    }
-
-    /**
-     * Add a prior. Can have wide noise model (when we really don't know)
-     * or narrow (for resetting) or mixed (to reset rotation alone)
-     * 
-     * @param value is copied, ok to delete
-     */
-    public void prior(
-            long time_us,
-            Pose2 value,
-            shared_ptr<? extends Base> noise) throws Throwable {
-        new_factors.add(PriorFactor.PriorFactorPose2(
-                Key.X(time_us), value, noise));
     }
 
     /** Add a factor to the graph. */

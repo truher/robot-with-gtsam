@@ -16,166 +16,193 @@ import gtsam.Point2;
 import gtsam.Point3;
 import gtsam.Pose2;
 import gtsam.Vector3;
-import gtsam.shared_ptr;
-import gtsam.noiseModel.Base;
 import gtsam.noiseModel.Diagonal;
 import kinodynamics.Kinematics.SwerveModulePositions;
-import pose_estimator.Estimate;
 import pose_estimator.Gyro;
 import pose_estimator.Odometry;
+import pose_estimator.Prior;
+import pose_estimator.Solver;
 import pose_estimator.Vision;
 import simulation.SimulatedCamera;
 import simulation.SimulatedOdometry;
 import simulation.SimulatedRobot;
+import util.Geometry;
 
 /**
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private final SimulatedOdometry sim;
-    private final Estimate est;
-    private final shared_ptr<? extends Base> odometry_noise;
+    private final Solver m_solver;
     private final Field2d m_field;
-    private final boolean initialized;
-    private final List<Point3> landmarks;
-    private final CameraConfig cameraconfig;
-    private final SimulatedCamera camera;
-    private final Vision vision;
-    private final Gyro gyro;
-    private final Odometry odometry;
+    private final List<Point3> m_landmarks;
 
-    private Pose2 state;
-    private int loopCount;
+    // simulated measurements
+    private final SimulatedOdometry m_simulatedOdometry;
+    private final SimulatedRobot m_simulatedRobot;
+    private final SimulatedCamera m_simulatedCamera;
 
+    // factors
+    private final Vision m_vision;
+    private final Gyro m_gyro;
+    private final Odometry m_odometry;
+    private final Prior m_prior;
+    private final boolean m_initialized;
+
+    /** Estimate from the solver. */
+    private Pose2 m_estimatedPose;
+    private int m_loopCount;
+
+    // the verbosity here is to trap the exception.
     public Sim() {
 
-        SimulatedOdometry sim = null;
-        Estimate est = null;
-        shared_ptr<Diagonal> odometry_noise = null;
-        Pose2 state = null;
+        Solver solver = null;
+        Pose2 estimatedPose = null;
         boolean initialized = false;
-        List<Point3> lm = null;
+        List<Point3> landmarks = null;
         CameraConfig conf = null;
-        SimulatedCamera cam = null;
-        Vision viz = null;
-        Gyro gy = null;
-        Odometry od = null;
+
+        // SIMULATED MEASUREMENTS
+        SimulatedRobot simulatedRobot = null;
+        SimulatedOdometry simulatedOdometry = null;
+        SimulatedCamera simulatedCamera = null;
+
+        // FACTORS
+        Vision vision = null;
+        Gyro gyro = null;
+        Odometry odometry = null;
+        Prior prior = null;
 
         Field2d field = null;
 
         try {
-            FieldMap fieldMap = new FieldMap();
-            // TODO: correct tag location
-            field = new Field2d();
-            field.getObject("tag0").setPose(new Pose2d(8, 4, new Rotation2d(0)));
-            Pose2d initial = SimulatedRobot.pose(0);
 
-            sim = new SimulatedOdometry(fieldMap, initial);
             int lagMicroseconds = 100000;
-            est = new Estimate(lagMicroseconds);
+            solver = new Solver(lagMicroseconds);
 
-            Pose2 prior_mean = new Pose2(0, 0, 0);
-            est.addVariable(0, prior_mean);
-            est.prior(0, prior_mean, Diagonal.Sigmas(
-                    new Vector3(100, 100, 100)));
+            estimatedPose = new Pose2();
 
-            /** TODO: make odometry noise speed-dependent (not this constant). */
-            odometry_noise = Diagonal.Sigmas(
-                    new Vector3(0.02, 0.02, 0.05));
-
-            state = new Pose2();
-
+            //
+            // LANDMARKS
+            //
             List<Point3> tag = new FieldMap().get(0);
-            lm = List.of(tag.get(3), tag.get(1), tag.get(2), tag.get(3));
+            landmarks = List.of(tag.get(0), tag.get(1), tag.get(2), tag.get(3));
+            FieldMap fieldMap = new FieldMap();
+            field = new Field2d();
+            field.getObject("tag0").setPose(new Pose2d(tag.get(0).x(), tag.get(0).y(), new Rotation2d(0)));
+            field.getObject("tag1").setPose(new Pose2d(tag.get(1).x(), tag.get(1).y(), new Rotation2d(0)));
+            field.getObject("tag2").setPose(new Pose2d(tag.get(2).x(), tag.get(2).y(), new Rotation2d(0)));
+            field.getObject("tag3").setPose(new Pose2d(tag.get(3).x(), tag.get(3).y(), new Rotation2d(0)));
 
             conf = new CameraConfig();
-            cam = new SimulatedCamera(lm, conf);
 
-            viz = new Vision(est, conf);
-            gy = new Gyro(est);
-            od = new Odometry(est);
+            //
+            // SIMULATED MEASUREMENTS
+            //
+            simulatedRobot = new SimulatedRobot();
+            Pose2d initial = simulatedRobot.pose(0);
+            simulatedCamera = new SimulatedCamera(landmarks, conf);
 
-            // this should just record the positions and timestamp
-            od.add(0, sim.positions(initial), odometry_noise);
+            //
+            // FACTORS
+            //
+            vision = new Vision(solver, conf);
+            gyro = new Gyro(solver);
+            odometry = new Odometry(solver);
+            prior = new Prior(solver);
+
+            // Add initial variable.
+            Pose2 initialPose = new Pose2(0, 0, 0);
+            solver.addVariable(0, initialPose);
+
+            // Add a very loose prior for the initial state,
+            // to keep the solver happy.
+            prior.add(0, initialPose,
+                    Diagonal.Sigmas(new Vector3(10, 10, 10)));
+
+            // Record the initial timestamp and positions.
+            simulatedOdometry = new SimulatedOdometry(fieldMap, initial);
+            odometry.add(0, simulatedOdometry.positions(initial));
 
             initialized = true;
         } catch (Throwable e) {
             e.printStackTrace();
         }
 
-        this.sim = sim;
-        this.est = est;
-        this.odometry_noise = odometry_noise;
-        this.state = state;
+        m_solver = solver;
+        m_estimatedPose = estimatedPose;
         m_field = field;
-        loopCount = 1;
-        landmarks = lm;
-        cameraconfig = conf;
-        camera = cam;
-        vision = viz;
-        gyro = gy;
-        odometry = od;
-
+        m_loopCount = 1;
+        m_landmarks = landmarks;
+        // simulated measurements
+        m_simulatedCamera = simulatedCamera;
+        m_simulatedRobot = simulatedRobot;
+        m_simulatedOdometry = simulatedOdometry;
+        // factors
+        m_vision = vision;
+        m_gyro = gyro;
+        m_odometry = odometry;
+        m_prior = prior;
         SmartDashboard.putData("Field", m_field);
-        this.initialized = initialized;
+        m_initialized = initialized;
     }
 
     public void run() {
-        if (!initialized)
+        if (!m_initialized)
             return;
         try {
-            SmartDashboard.putNumber("i", loopCount);
+            SmartDashboard.putNumber("i", m_loopCount);
 
             // Nanosecond timer to see how long the solver takes.
             long t0_ns = System.nanoTime();
 
             // Current simulation time in microseconds.
-            long t1_us = 20000 * loopCount;
+            long t1_us = 20000 * m_loopCount;
 
-            ////
-            //
-            // SIMULATE
-            //
-            // Update ground truth.
+            // Compute ground truth and plot it.
+            Pose2d groundTruthPose = m_simulatedRobot.pose(t1_us);
+            m_field.getObject("gt").setPose(groundTruthPose);
 
-            Pose2d gtPose2d = SimulatedRobot.pose(t1_us);
+            // Initial value is the previous estimate.
+            m_solver.addVariable(t1_us, m_estimatedPose);
 
-            ////
-            //
-            // ESTIMATE
-            //
+            applyOdometry(t1_us, groundTruthPose);
 
-            // Add the initial estimate of pose.
+            applyGyro(t1_us, groundTruthPose);
 
-            est.addVariable(t1_us, state);
-
-            applyOdometry(t1_us, gtPose2d);
-
-            applyGyro(t1_us, gtPose2d);
-
-            applyCamera(t1_us, gtPose2d);
+            applyCamera(t1_us, groundTruthPose);
 
             // Run the solver
-            est.update();
+            m_solver.update();
 
             // Log a little about the iteration.
-            long t1_ns = System.nanoTime();
-            long et_ns = t1_ns - t0_ns;
-            SmartDashboard.putNumber("et (ms)", (double) et_ns * 1e-6);
-            SmartDashboard.putNumber("size", est.result_size());
+            logET(t0_ns);
 
-            state = est.mean_pose2(Key.X(t1_us));
+            // Update the estimated pose.
+            m_estimatedPose = m_solver.mean_pose2(Key.X(t1_us));
 
-            Pose2d estPose2d = new Pose2d(state.x(), state.y(), new Rotation2d(state.theta()));
-            m_field.setRobotPose(estPose2d);
-            logErr(gtPose2d, estPose2d);
+            // Show the estimate, errors, and samples on the dashboard.
+            plotEstimatedPose(groundTruthPose);
             plotSamples(t1_us);
-            m_field.getObject("gt").setPose(gtPose2d);
 
-            ++loopCount;
+            ++m_loopCount;
         } catch (Throwable e) {
             e.printStackTrace();
         }
+    }
+
+    /** Plot the estimated pose and the error from ground truth. */
+    private void plotEstimatedPose(Pose2d groundTruthPose) throws Throwable {
+        Pose2d estPose2d = new Pose2d(m_estimatedPose.x(), m_estimatedPose.y(),
+                new Rotation2d(m_estimatedPose.theta()));
+        m_field.setRobotPose(estPose2d);
+        logErr(groundTruthPose, estPose2d);
+    }
+
+    private void logET(long t0_ns) throws Throwable {
+        long t1_ns = System.nanoTime();
+        long et_ns = t1_ns - t0_ns;
+        SmartDashboard.putNumber("et (ms)", (double) et_ns * 1e-6);
+        SmartDashboard.putNumber("size", m_solver.result_size());
     }
 
     /**
@@ -195,8 +222,8 @@ public class Sim {
         int N = 10;
         List<Pose2d> samples = new ArrayList<>();
         for (int i = 0; i < N; ++i) {
-            Pose2 sample = est.sample_Pose2(Key.X(t1_us));
-            Pose2d wSample = toPose2d(sample);
+            Pose2 sample = m_solver.sample_Pose2(Key.X(t1_us));
+            Pose2d wSample = Geometry.toPose2d(sample);
             samples.add(wSample);
         }
         FieldObject2d o = m_field.getObject("samples");
@@ -204,29 +231,24 @@ public class Sim {
     }
 
     private void applyGyro(long t1_us, Pose2d gtPose2d) throws Throwable {
-        // est.gyro(t1_us, gtPose2d.getRotation().getRadians());
-        gyro.add(t1_us, gtPose2d.getRotation().getRadians());
+        m_gyro.add(t1_us, gtPose2d.getRotation().getRadians());
     }
 
     private void applyOdometry(long t1_us, Pose2d gtPose2d) throws Throwable {
-        SwerveModulePositions positions = sim.positions(gtPose2d);
-        // est.odometry(t1_us, positions, odometry_noise);
-        odometry.add(t1_us, positions, odometry_noise);
+        SwerveModulePositions positions = m_simulatedOdometry.positions(gtPose2d);
+        m_odometry.add(t1_us, positions);
     }
 
     /** Retrieve simulated camera measurements and apply them to the graph. */
     private void applyCamera(long t1_us, Pose2d gtPose2d) throws Throwable {
-        List<Point2> measurements = camera.pixels(gtPose2d);
-        if (landmarks.size() != measurements.size())
+        List<Point2> measurements = m_simulatedCamera.pixels(gtPose2d);
+        if (m_landmarks.size() != measurements.size())
             return;
-        for (int i = 0; i < landmarks.size(); ++i) {
-            Point3 landmark = landmarks.get(i);
+        for (int i = 0; i < m_landmarks.size(); ++i) {
+            Point3 landmark = m_landmarks.get(i);
             Point2 measurement = measurements.get(i);
-            vision.add(t1_us, landmark, measurement);
+            m_vision.add(t1_us, landmark, measurement);
         }
     }
 
-    Pose2d toPose2d(Pose2 p) throws Throwable {
-        return new Pose2d(p.x(), p.y(), new Rotation2d(p.theta()));
-    }
 }

@@ -12,15 +12,15 @@ import gtsam.shared_ptr;
 import gtsam.noiseModel.Diagonal;
 
 /**
- * Turn measurements into factors.
+ * Use PlanarProjectionFactor to model camera measurements.
  */
 public class Vision {
-    private final Estimate estimate;
+    private final Solver estimate;
     private final Pose3 camera_offset;
     private final Cal3DS2 calib;
     private final shared_ptr<Diagonal> noise;
 
-    public Vision(Estimate e, CameraConfig conf) throws Throwable {
+    public Vision(Solver e, CameraConfig conf) throws Throwable {
         estimate = e;
         camera_offset = conf.camera_offset;
         calib = conf.calib;

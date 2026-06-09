@@ -20,11 +20,15 @@ public class SimulatedRobot {
     // maximum pan angle, radians
     private static double PAN_SCALE_RAD = 0.5;
 
+    public SimulatedRobot() {
+
+    }
+
     /**
      * @param time_s sim time in seconds
      * @return robot pose
      */
-    public static Pose2d pose(long t1_us) {
+    public Pose2d pose(long t1_us) {
         double time_s = (double) t1_us * 1e-6;
         double angle = 2 * Math.PI * time_s / PATH_PERIOD_S;
         double gt_x = CX + RADIUS * Math.cos(angle);
