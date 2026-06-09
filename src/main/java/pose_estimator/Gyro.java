@@ -19,9 +19,9 @@ public class Gyro {
     /**
      * TODO: use the new planar gyro factor.
      */
-    public void add(long t0_us, double yaw) throws Throwable {
+    public void add(long t1_us, double yaw) throws Throwable {
         estimate.add(PoseRotationPrior.PoseRotationPriorPose2(
-                Key.X(t0_us), new Pose2(0, 0, yaw), noise));
+                Key.X(t1_us), new Pose2(0, 0, yaw), noise));
     }
 
 }

@@ -32,10 +32,10 @@ public class Vision {
     /**
      * Add a factor for the measurement of the landmark.
      */
-    public void add(long t_us, Point3 landmark, Point2 measurement)
+    public void add(long t1_us, Point3 landmark, Point2 measurement)
             throws Throwable {
         estimate.add(PlanarProjectionFactor1.newPlanarProjectionFactor1(
-                Key.X(t_us),
+                Key.X(t1_us),
                 landmark,
                 measurement,
                 camera_offset,

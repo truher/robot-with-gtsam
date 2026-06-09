@@ -50,12 +50,7 @@ public class Odometry {
      * Remember to call addVariable so that the odometry factor has something to
      * refer to.
      * 
-     * t1_us: timestamp in microseconds.
-     * 
-     * TODO: something more clever with timestamps
-     * 
-     * TODO: noise should be speed dependent: when not moving, noise is very low,
-     * and when moving fast, noise is much higher.
+     * @param t1_us timestamp in microseconds.
      */
     public void add(
             long t1_us,
