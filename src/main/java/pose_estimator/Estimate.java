@@ -94,12 +94,12 @@ public class Estimate {
     }
 
     /**
-     * Add a new robot state (pose) to the estimator, if it doesn't already exist.
+     * Add a new robot pose variable to the estimator, if it doesn't already exist.
      * 
      * @param time_us
      * @param initial_value cloned, ok to delete after this.
      */
-    public void add_state(long time_us, Pose2 initial_value) throws Throwable {
+    public void addVariable(long time_us, Pose2 initial_value) throws Throwable {
         Key key = Key.X(time_us);
         // System.out.printf("add state %d\n", key.j);
         if (result.exists(key)) {
@@ -214,7 +214,7 @@ public class Estimate {
             Pose3 camera_offset,
             Cal3DS2 calib) throws Throwable {
         if (landmarks.size() != measured.size())
-            throw new IllegalArgumentException();
+            return;
 
         for (int i = 0; i < landmarks.size(); ++i) {
             Point3 landmark = landmarks.get(i);

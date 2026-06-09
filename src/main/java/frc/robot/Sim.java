@@ -3,44 +3,55 @@ package frc.robot;
 import java.util.ArrayList;
 import java.util.List;
 
+import config.CameraConfig;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Transform2d;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.FieldObject2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import field.FieldMap;
 import gtsam.Key;
+import gtsam.Point2;
+import gtsam.Point3;
 import gtsam.Pose2;
 import gtsam.Vector3;
 import gtsam.shared_ptr;
 import gtsam.noiseModel.Base;
 import gtsam.noiseModel.Diagonal;
+import kinodynamics.Odometry.SwerveModulePositions;
 import pose_estimator.Estimate;
-import pose_estimator.simulation.CircleSimulator;
+import pose_estimator.simulation.SimulatedOdometry;
+import pose_estimator.simulation.SimulatedCamera;
+import pose_estimator.simulation.SimulatedRobot;
 import util.Stats;
 
 /**
- * Outer simulation loop.  Call "run" periodically.
+ * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private final CircleSimulator sim;
+    private final SimulatedOdometry sim;
     private final Estimate est;
     private final shared_ptr<? extends Base> odometry_noise;
-    private final Stats etStats;
-    private final Stats sizeStats;
     private final Field2d m_field;
     private final boolean initialized;
+    private final List<Point3> landmarks;
+    private final CameraConfig cameraconfig;
+    private final SimulatedCamera camera;
 
     private Pose2 state;
     private int loopCount;
 
     public Sim() {
 
-        CircleSimulator sim = null;
+        SimulatedOdometry sim = null;
         Estimate est = null;
         shared_ptr<Diagonal> odometry_noise = null;
         Pose2 state = null;
         boolean initialized = false;
+        List<Point3> lm = null;
+        CameraConfig conf = null;
+        SimulatedCamera cam = null;
 
         Field2d field = null;
 
@@ -49,24 +60,33 @@ public class Sim {
             // TODO: correct tag location
             field = new Field2d();
             field.getObject("tag0").setPose(new Pose2d(8, 4, new Rotation2d(0)));
-            sim = new CircleSimulator(fieldMap);
+            Pose2d initial = SimulatedRobot.pose(0);
+
+            sim = new SimulatedOdometry(fieldMap, initial);
             int lagMicroseconds = 100000;
             est = new Estimate(lagMicroseconds);
 
             Pose2 prior_mean = new Pose2(0, 0, 0);
-            est.add_state(0, prior_mean);
+            est.addVariable(0, prior_mean);
             est.prior(0, prior_mean, Diagonal.Sigmas(
                     new Vector3(100, 100, 100)));
 
             /** TODO: make odometry noise speed-dependent (not this constant). */
             odometry_noise = Diagonal.Sigmas(
                     new Vector3(0.02, 0.02, 0.05));
+
             // this should just record the positions and timestamp
-            est.odometry(0, sim.positions(), odometry_noise);
+            est.odometry(0, sim.positions(initial), odometry_noise);
 
             state = new Pose2();
-            initialized = true;
 
+            List<Point3> tag = new FieldMap().get(0);
+            lm = List.of(tag.get(3), tag.get(1), tag.get(2), tag.get(3));
+
+            conf = new CameraConfig();
+            cam = new SimulatedCamera(lm, conf);
+
+            initialized = true;
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -76,14 +96,13 @@ public class Sim {
         this.odometry_noise = odometry_noise;
         this.state = state;
         m_field = field;
-        etStats = new Stats();
-        sizeStats = new Stats();
         loopCount = 1;
+        landmarks = lm;
+        cameraconfig = conf;
+        camera = cam;
 
         SmartDashboard.putData("Field", m_field);
         this.initialized = initialized;
-        // TODO: is this needed?
-        run();
     }
 
     public void run() {
@@ -92,83 +111,103 @@ public class Sim {
         try {
             SmartDashboard.putNumber("i", loopCount);
 
+            // Nanosecond timer to see how long the solver takes.
             long t0_ns = System.nanoTime();
 
+            // Current simulation time in microseconds.
             long t1_us = 20000 * loopCount;
 
-            //////////////////////////////////////////
+            ///////////////
             //
             // SIMULATE
             //
             // Update ground truth.
-            sim.step(0.02);
-            double gt_x = sim.gt_x;
-            double gt_y = sim.gt_y;
-            double gt_theta = sim.gt_theta;
-            Pose2d gtPose2d = new Pose2d(gt_x, gt_y, new Rotation2d(gt_theta));
-            m_field.getObject("gt").setPose(gtPose2d);
+         
+            Pose2d gtPose2d = SimulatedRobot.pose(t1_us);
 
-            //////////////////////////////////////////
+            ///////////////
             //
             // ESTIMATE
             //
 
             // Add the initial estimate of pose.
-            est.add_state(t1_us, state);
-            //
-            est.odometry(t1_us, sim.positions(), odometry_noise);
-            est.gyro(t1_us, sim.gt_theta);
-            int pixelsInView = sim.gt_pixels.size();
-            SmartDashboard.putNumber("pixels in view", pixelsInView);
-            if (pixelsInView > 0) {
-                est.apriltag_for_smoothing_batch(
-                        sim.landmarks, sim.gt_pixels, t1_us, sim.camera_offset, sim.calib());
-            }
+
+            est.addVariable(t1_us, state);
+
+            applyOdometry(t1_us, gtPose2d);
+
+            applyGyro(t1_us, gtPose2d);
+
+            applyCamera(t1_us, gtPose2d);
+
+            // Run the solver
             est.update();
+
+            // Log a little about the iteration.
             long t1_ns = System.nanoTime();
             long et_ns = t1_ns - t0_ns;
-            etStats.update(et_ns);
-            sizeStats.update(est.result_size());
+            SmartDashboard.putNumber("et (ms)", (double) et_ns * 1e-6);
+            SmartDashboard.putNumber("size", est.result_size());
 
-            Key poseKey = Key.X(t1_us);
-            Pose2 estPose2 = est.mean_pose2(poseKey);
+            state = est.mean_pose2(Key.X(t1_us));
 
-            // Use the previous estimate as the new estimate.
-            state = estPose2;
-
-            double est_x = estPose2.x();
-            double est_y = estPose2.y();
-            double est_theta = estPose2.theta();
-
-            Pose2d estPose2d = new Pose2d(est_x, est_y, new Rotation2d(est_theta));
+            Pose2d estPose2d = new Pose2d(state.x(), state.y(), new Rotation2d(state.theta()));
             m_field.setRobotPose(estPose2d);
-
-            double err_x = est_x - gt_x;
-            double err_y = est_y - gt_y;
-            double err_theta = est_theta - gt_theta;
-
-            SmartDashboard.putNumber("err_x (m)", err_x);
-            SmartDashboard.putNumber("err_y (m)", err_y);
-            SmartDashboard.putNumber("err_theta (rad)", err_theta);
-            SmartDashboard.putNumber("et (ms)", etStats.mean() / 1000000);
-            SmartDashboard.putNumber("size", sizeStats.mean());
-
-            // plot some samples around the mean.
-
-            int N = 10;
-            List<Pose2d> samples = new ArrayList<>();
-            for (int i = 0; i < N; ++i) {
-                Pose2 sample = est.sample_Pose2(poseKey);
-                Pose2d wSample = toPose2d(sample);
-                samples.add(wSample);
-            }
-            FieldObject2d o = m_field.getObject("samples");
-            o.setPoses(samples);
+            logErr(gtPose2d, estPose2d);
+            plotSamples(t1_us);
+            m_field.getObject("gt").setPose(gtPose2d);
 
             ++loopCount;
         } catch (Throwable e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Log the estimation error.
+     */
+    private void logErr(Pose2d gtPose2d, Pose2d estPose2d) {
+        Transform2d poseErr = estPose2d.minus(gtPose2d);
+        SmartDashboard.putNumber("err_x (m)", poseErr.getX());
+        SmartDashboard.putNumber("err_y (m)", poseErr.getY());
+        SmartDashboard.putNumber("err_theta (rad)", poseErr.getRotation().getRadians());
+    }
+
+    /**
+     * Plot some samples around the mean.
+     */
+    private void plotSamples(long t1_us) throws Throwable {
+        int N = 10;
+        List<Pose2d> samples = new ArrayList<>();
+        for (int i = 0; i < N; ++i) {
+            Pose2 sample = est.sample_Pose2(Key.X(t1_us));
+            Pose2d wSample = toPose2d(sample);
+            samples.add(wSample);
+        }
+        FieldObject2d o = m_field.getObject("samples");
+        o.setPoses(samples);
+    }
+
+    private void applyGyro(long t1_us, Pose2d gtPose2d) throws Throwable {
+        est.gyro(t1_us, gtPose2d.getRotation().getRadians());
+    }
+
+    private void applyOdometry(long t1_us, Pose2d gtPose2d) throws Throwable {
+        SwerveModulePositions positions = sim.positions(gtPose2d);
+        est.odometry(t1_us, positions, odometry_noise);
+    }
+
+    private void applyCamera(long t1_us, Pose2d gtPose2d) throws Throwable {
+        List<Point2> gt_pixels = camera.pixels(gtPose2d);
+        if (gt_pixels.isEmpty())
+            return;
+        est.apriltag_for_smoothing_batch(
+                landmarks,
+                gt_pixels,
+                t1_us,
+                cameraconfig.camera_offset,
+                cameraconfig.calib);
+
     }
 
     Pose2d toPose2d(Pose2 p) throws Throwable {
