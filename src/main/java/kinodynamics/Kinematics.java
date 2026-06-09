@@ -9,7 +9,7 @@ import gtsam.Vector3;
 /**
  * This is so i don't need to import all the Team100/WPI stuff about odometry.
  */
-public class Odometry {
+public class Kinematics {
     public static record RotR2(double c, double s) {
         public static RotR2 fromDegrees(double x) {
             double xr = Math.toRadians(x);

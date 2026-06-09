@@ -19,12 +19,14 @@ import gtsam.Vector3;
 import gtsam.shared_ptr;
 import gtsam.noiseModel.Base;
 import gtsam.noiseModel.Diagonal;
-import kinodynamics.Odometry.SwerveModulePositions;
+import kinodynamics.Kinematics.SwerveModulePositions;
 import pose_estimator.Estimate;
-import pose_estimator.simulation.SimulatedOdometry;
-import pose_estimator.simulation.SimulatedCamera;
-import pose_estimator.simulation.SimulatedRobot;
-import util.Stats;
+import pose_estimator.Gyro;
+import pose_estimator.Odometry;
+import pose_estimator.Vision;
+import simulation.SimulatedCamera;
+import simulation.SimulatedOdometry;
+import simulation.SimulatedRobot;
 
 /**
  * Outer simulation loop. Call "run" periodically.
@@ -38,6 +40,9 @@ public class Sim {
     private final List<Point3> landmarks;
     private final CameraConfig cameraconfig;
     private final SimulatedCamera camera;
+    private final Vision vision;
+    private final Gyro gyro;
+    private final Odometry odometry;
 
     private Pose2 state;
     private int loopCount;
@@ -52,6 +57,9 @@ public class Sim {
         List<Point3> lm = null;
         CameraConfig conf = null;
         SimulatedCamera cam = null;
+        Vision viz = null;
+        Gyro gy = null;
+        Odometry od = null;
 
         Field2d field = null;
 
@@ -75,9 +83,6 @@ public class Sim {
             odometry_noise = Diagonal.Sigmas(
                     new Vector3(0.02, 0.02, 0.05));
 
-            // this should just record the positions and timestamp
-            est.odometry(0, sim.positions(initial), odometry_noise);
-
             state = new Pose2();
 
             List<Point3> tag = new FieldMap().get(0);
@@ -85,6 +90,13 @@ public class Sim {
 
             conf = new CameraConfig();
             cam = new SimulatedCamera(lm, conf);
+
+            viz = new Vision(est, conf);
+            gy = new Gyro(est);
+            od = new Odometry(est);
+
+            // this should just record the positions and timestamp
+            od.add(0, sim.positions(initial), odometry_noise);
 
             initialized = true;
         } catch (Throwable e) {
@@ -100,6 +112,9 @@ public class Sim {
         landmarks = lm;
         cameraconfig = conf;
         camera = cam;
+        vision = viz;
+        gyro = gy;
+        odometry = od;
 
         SmartDashboard.putData("Field", m_field);
         this.initialized = initialized;
@@ -117,15 +132,15 @@ public class Sim {
             // Current simulation time in microseconds.
             long t1_us = 20000 * loopCount;
 
-            ///////////////
+            ////
             //
             // SIMULATE
             //
             // Update ground truth.
-         
+
             Pose2d gtPose2d = SimulatedRobot.pose(t1_us);
 
-            ///////////////
+            ////
             //
             // ESTIMATE
             //
@@ -189,25 +204,26 @@ public class Sim {
     }
 
     private void applyGyro(long t1_us, Pose2d gtPose2d) throws Throwable {
-        est.gyro(t1_us, gtPose2d.getRotation().getRadians());
+        // est.gyro(t1_us, gtPose2d.getRotation().getRadians());
+        gyro.add(t1_us, gtPose2d.getRotation().getRadians());
     }
 
     private void applyOdometry(long t1_us, Pose2d gtPose2d) throws Throwable {
         SwerveModulePositions positions = sim.positions(gtPose2d);
-        est.odometry(t1_us, positions, odometry_noise);
+        // est.odometry(t1_us, positions, odometry_noise);
+        odometry.add(t1_us, positions, odometry_noise);
     }
 
+    /** Retrieve simulated camera measurements and apply them to the graph. */
     private void applyCamera(long t1_us, Pose2d gtPose2d) throws Throwable {
-        List<Point2> gt_pixels = camera.pixels(gtPose2d);
-        if (gt_pixels.isEmpty())
+        List<Point2> measurements = camera.pixels(gtPose2d);
+        if (landmarks.size() != measurements.size())
             return;
-        est.apriltag_for_smoothing_batch(
-                landmarks,
-                gt_pixels,
-                t1_us,
-                cameraconfig.camera_offset,
-                cameraconfig.calib);
-
+        for (int i = 0; i < landmarks.size(); ++i) {
+            Point3 landmark = landmarks.get(i);
+            Point2 measurement = measurements.get(i);
+            vision.add(t1_us, landmark, measurement);
+        }
     }
 
     Pose2d toPose2d(Pose2 p) throws Throwable {

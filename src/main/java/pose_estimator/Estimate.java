@@ -1,64 +1,35 @@
 package pose_estimator;
 
-import java.util.List;
-
 import gtsam.BatchFixedLagSmoother;
-import gtsam.BetweenFactorPose2;
-import gtsam.Cal3DS2;
 import gtsam.FixedLagSmoother;
 import gtsam.Key;
 import gtsam.Marginals;
 import gtsam.Matrix;
+import gtsam.NonlinearFactor;
 import gtsam.NonlinearFactorGraph;
-import gtsam.PlanarProjectionFactor1;
-import gtsam.Point2;
-import gtsam.Point3;
 import gtsam.Pose2;
-import gtsam.Pose3;
-import gtsam.PoseRotationPrior;
 import gtsam.PriorFactor;
 import gtsam.Values;
 import gtsam.Vector;
-import gtsam.Vector1;
-import gtsam.Vector2;
 import gtsam.Vector3;
 import gtsam.shared_ptr;
 import gtsam.noiseModel.Base;
-import gtsam.noiseModel.Diagonal;
-import kinodynamics.DriveUtil;
-import kinodynamics.Odometry;
-import kinodynamics.Odometry.PointR2;
 
 /**
  * Port of estimate.py from 2024.
  */
 public class Estimate {
-    private final shared_ptr<Diagonal> PRIOR_NOISE;
-    private final Pose2 PRIOR_MEAN;
-    private final shared_ptr<Diagonal> GYRO_NOISE;
     private final BatchFixedLagSmoother isam;
     private final NonlinearFactorGraph new_factors;
     private final Values new_values;
     /** key is Key, "X(timestamp in us)", value is timestamp in us */
     private final FixedLagSmoother.KeyTimestampMap new_timestamps;
-    private final Odometry.SwerveDriveKinematics100 kinematics;
 
-    private Odometry.SwerveModulePositions positions;
     private Values result;
-
-    Long odo_t = null;
-
-    Pose2 default_prior;
-    shared_ptr<? extends Base> default_prior_noise;
-    Odometry.Twist2d measurement = new Odometry.Twist2d();
 
     /** @param lag in microseconds, not seconds as in python */
     public Estimate(double lag) throws Throwable {
-        PRIOR_NOISE = Diagonal.Sigmas(
-                new Vector3(160, 80, 60));
-        PRIOR_MEAN = new Pose2(8, 4, 0);
-        GYRO_NOISE = Diagonal.Sigmas(
-                new Vector1(0.01));
+
         // Initialize the model
         // initial module positions are at their origins.
         // TODO: some other initial positions?
@@ -70,27 +41,6 @@ public class Estimate {
         new_factors = new NonlinearFactorGraph();
         new_values = new Values();
         new_timestamps = new FixedLagSmoother.KeyTimestampMap();
-
-        kinematics = new Odometry.SwerveDriveKinematics100(
-                List.of(
-                        new PointR2(0.5, 0.5),
-                        new PointR2(0.5, -0.5),
-                        new PointR2(-0.5, 0.5),
-                        new PointR2(-0.5, -0.5)));
-        positions = new Odometry.SwerveModulePositions(
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)));
-
-        // for when we make a state but don't have any odometry for it
-        default_prior = new Pose2(0, 0, 0);
-        default_prior_noise = Diagonal.Sigmas(new Vector3(10, 10, 10));
-
     }
 
     /**
@@ -127,130 +77,22 @@ public class Estimate {
             long time_us,
             Pose2 value,
             shared_ptr<? extends Base> noise) throws Throwable {
-
-        new_factors.add(
-                PriorFactor.PriorFactorPose2(
-                        Key.X(time_us),
-                        value,
-                        noise));
-        // use this prior if there's a hole to fill
-        default_prior = value;
-        default_prior_noise = noise;
+        new_factors.add(PriorFactor.PriorFactorPose2(
+                Key.X(time_us), value, noise));
     }
 
-    /**
-     * Add an odometry measurement. Remember to call add_state so that
-     * the odometry factor has something to refer to.
-     * 
-     * t0_us, t1_us: network tables timestamp in integer microseconds.
-     * TODO: something more clever with timestamps
-     * 
-     * TODO: noise should be speed dependent: when not moving, noise is very low,
-     * and when moving fast, noise is much higher.
-     */
-    public void odometry(
-            long t1_us,
-            Odometry.SwerveModulePositions newPositions,
-            shared_ptr<? extends Base> noise) throws Throwable {
-
-        // each odometry update maps exactly to a "between" factor
-        // remember a "twist" is a robot-relative concept
-
-        // print("odo time ", t1_us)
-        if (odo_t == null) {
-            // no previous state to refer to.
-            // if this happens then the current state will likely
-            // have no factors, so add a prior
-            prior(t1_us, default_prior, default_prior_noise);
-            // print("odo_t null")
-            this.positions = newPositions;
-            odo_t = t1_us;
-            return;
-        }
-
-        long t0_us = odo_t;
-
-        Odometry.SwerveModuleDeltas deltas = DriveUtil.module_position_delta(
-                this.positions, newPositions);
-        // this is the tangent-space (twist) measurement
-        Odometry.Twist2d measurement = kinematics.to_twist_2d(deltas);
-        // print("add odometry factor ", t0_us, t1_us, self.measurement)
-        Pose2 gp = new Pose2().expmap(new Vector3(
-                measurement.x(),
-                measurement.y(),
-                measurement.theta()));
-
-        new_factors.add(
-                BetweenFactorPose2.newBetweenFactorPose2(
-                        Key.X(t0_us), Key.X(t1_us), gp, noise));
-
-        this.positions = newPositions;
-        odo_t = t1_us;
-    }
-
-    /**
-     * ALERT! The gyro in 2026 works like a "between" factor,
-     * so this should be changed accordingly.
-     */
-    public void gyro(long t0_us, double yaw) throws Throwable {
-        // if this is the only factor attached to this variable
-        // then it will be underconstrained (i.e. no constraint on x or y), which could
-        // happen.
-        new_factors.add(
-                PoseRotationPrior.PoseRotationPriorPose2(
-                        Key.X(t0_us), new Pose2(0, 0, yaw), GYRO_NOISE));
-        // if you have only the gyro (which only constrains yaw)
-        // you will fail, so add an extremely loose prior.
-        prior(t0_us, PRIOR_MEAN, PRIOR_NOISE);
-    }
-
-    /**
-     * Add a factor for each landmark/pixel pair.
-     */
-    public void apriltag_for_smoothing_batch(
-            List<Point3> landmarks,
-            List<Point2> measured,
-            long t0_us,
-            Pose3 camera_offset,
-            Cal3DS2 calib) throws Throwable {
-        if (landmarks.size() != measured.size())
-            return;
-
-        for (int i = 0; i < landmarks.size(); ++i) {
-            Point3 landmark = landmarks.get(i);
-            Point2 px = measured.get(i);
-            shared_ptr<Diagonal> noise = Diagonal.Sigmas(
-                    new Vector2(5, 5));
-            new_factors.add(
-                    PlanarProjectionFactor1.newPlanarProjectionFactor1(
-                            Key.X(t0_us),
-                            landmark,
-                            px,
-                            camera_offset,
-                            calib,
-                            noise));
-        }
+    /** Add a factor to the graph. */
+    public <T extends NonlinearFactor> void add(shared_ptr<T> f)
+            throws Throwable {
+        new_factors.add(f);
     }
 
     /**
      * Run the solver
      */
     public void update() throws Throwable {
-        // System.out.println("============UPDATE============");
-        // print(self._new_factors)
-        // print(self._new_values)
-        // new_values.print();
-        // print(self._new_timestamps)
         isam.update(new_factors, new_values, new_timestamps);
-        // System.out.println("retrieve estimates");
         result = isam.calculateEstimate();
-
-        // print("TIMESTAMPS")
-        // print(self.isam.timestamps())
-        // k = max(isam.timestamps().keys());
-        // ts = max(isam.timestamps().values());
-        // print(self.result.atPose2(k))
-        // print(ts)
 
         // reset the accumulators
         new_factors.resize(0);

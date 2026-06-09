@@ -1,9 +1,9 @@
 package kinodynamics;
 
-import kinodynamics.Odometry.SwerveModuleDelta;
-import kinodynamics.Odometry.SwerveModuleDeltas;
-import kinodynamics.Odometry.SwerveModulePosition100;
-import kinodynamics.Odometry.SwerveModulePositions;
+import kinodynamics.Kinematics.SwerveModuleDelta;
+import kinodynamics.Kinematics.SwerveModuleDeltas;
+import kinodynamics.Kinematics.SwerveModulePosition100;
+import kinodynamics.Kinematics.SwerveModulePositions;
 
 public class DriveUtil {
     public static SwerveModuleDeltas module_position_delta(

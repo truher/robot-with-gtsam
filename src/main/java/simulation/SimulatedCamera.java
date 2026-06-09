@@ -1,4 +1,4 @@
-package pose_estimator.simulation;
+package simulation;
 
 import java.util.List;
 import java.util.Random;

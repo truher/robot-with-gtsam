@@ -1,4 +1,4 @@
-package pose_estimator.simulation;
+package simulation;
 
 import java.util.List;
 import java.util.Random;
@@ -7,9 +7,9 @@ import edu.wpi.first.math.geometry.Pose2d;
 import field.FieldMap;
 import gtsam.Pose2;
 import gtsam.Vector3;
-import kinodynamics.Odometry;
-import kinodynamics.Odometry.PointR2;
-import kinodynamics.Odometry.Twist2d;
+import kinodynamics.Kinematics;
+import kinodynamics.Kinematics.PointR2;
+import kinodynamics.Kinematics.Twist2d;
 import util.Geometry;
 
 /**
@@ -18,30 +18,30 @@ import util.Geometry;
 public class SimulatedOdometry {
     private static Random RANDOM = new Random(42);
 
-    private final Odometry.SwerveDriveKinematics100 kinematics;
+    private final Kinematics.SwerveDriveKinematics100 kinematics;
 
     /** Previous positions. */
-    private Odometry.SwerveModulePositions positions;
+    private Kinematics.SwerveModulePositions positions;
     /** Previous pose */
     private Pose2 pose;
 
     public SimulatedOdometry(FieldMap fieldMap, Pose2d initial) throws Throwable {
-        kinematics = new Odometry.SwerveDriveKinematics100(
+        kinematics = new Kinematics.SwerveDriveKinematics100(
                 List.of(
                         new PointR2(0.5, 0.5),
                         new PointR2(0.5, -0.5),
                         new PointR2(-0.5, 0.5),
                         new PointR2(-0.5, -0.5)));
         // Positions start at zero.
-        positions = new Odometry.SwerveModulePositions(
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)),
-                new Odometry.SwerveModulePosition100(
-                        0, new Odometry.RotR2(1, 0)));
+        positions = new Kinematics.SwerveModulePositions(
+                new Kinematics.SwerveModulePosition100(
+                        0, new Kinematics.RotR2(1, 0)),
+                new Kinematics.SwerveModulePosition100(
+                        0, new Kinematics.RotR2(1, 0)),
+                new Kinematics.SwerveModulePosition100(
+                        0, new Kinematics.RotR2(1, 0)),
+                new Kinematics.SwerveModulePosition100(
+                        0, new Kinematics.RotR2(1, 0)));
         pose = Geometry.toPose2(initial);
     }
 
@@ -51,7 +51,7 @@ public class SimulatedOdometry {
      * 
      * @param gtPose2 current ground-truth pose.
      */
-    public Odometry.SwerveModulePositions positions(
+    public Kinematics.SwerveModulePositions positions(
             Pose2d gtPose2d) throws Throwable {
         final Pose2 newPose = Geometry.toPose2(gtPose2d);
 
