@@ -67,8 +67,22 @@ public class SimulatedCamera {
         Pose3 camera_pose = new Pose3(robot_pose).compose(camera_offset);
         PinholeCamera<Cal3DS2> camera = PinholeCamera.PinholeCameraCal3DS2(
                 camera_pose, calib);
-        Point2 pxNoise = new Point2(uniform(1), uniform(1));
+        Point2 pxNoise = noise();
         return camera.project(landmark).plus(pxNoise);
+    }
+
+    private Point2 noise() throws Throwable {
+        return zeroNoise();
+        // return uniformNoise();
+    }
+
+    private Point2 zeroNoise() throws Throwable {
+        return new Point2(0, 0);
+    }
+
+    
+    private Point2 uniformNoise() throws Throwable {
+        return new Point2(uniform(1), uniform(1));
     }
 
     private double uniform(double a) {

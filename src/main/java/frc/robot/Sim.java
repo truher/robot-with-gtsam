@@ -35,7 +35,7 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private static final boolean NEW_GYRO = false;
+    private static final boolean NEW_GYRO = true;
     private final Solver m_solver;
     private final Field2d m_field;
     private final List<Point3> m_landmarks;
@@ -51,7 +51,7 @@ public class Sim {
     private final Gyro m_gyro;
     private final BetweenGyro m_betweenGyro;
     private final Odometry m_odometry;
-    private final Prior m_prior;
+    // private final Prior m_prior;
     private final boolean m_initialized;
 
     /** Estimate from the solver. */
@@ -124,12 +124,13 @@ public class Sim {
             Pose2 p0 = new Pose2(0, 0, 0);
             Key x0 = Key.X(0);
             solver.addVariable(x0, 0, p0);
-            prior.add(x0, p0, Diagonal.Sigmas(new Vector3(10, 10, 10)));
+            prior.add(x0, p0, Diagonal.Sigmas(new Vector3(100, 100, 100)));
 
             // Initial gyro bias.
             Key b0 = Key.B(0);
             solver.addVariable(b0, 0, 0);
-            prior.add(b0, 0, Diagonal.Sigmas(new Vector1(1)));
+            // try a very low bias prior
+            prior.add(b0, 0, Diagonal.Sigmas(new Vector1(0.001)));
             betweenGyro.add(0, simulatedGyro.yaw(0, initial));
 
             // Record the initial timestamp and positions.
@@ -156,7 +157,7 @@ public class Sim {
         m_gyro = gyro;
         m_betweenGyro = betweenGyro;
         m_odometry = odometry;
-        m_prior = prior;
+        // m_prior = prior;
         SmartDashboard.putData("Field", m_field);
         m_initialized = initialized;
     }

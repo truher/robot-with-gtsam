@@ -47,7 +47,7 @@ public class SimulatedOdometry {
 
     /**
      * Uses the previous given pose to compute new module positions for the new
-     * pose.  Adds 1% noise.
+     * pose. Adds 1% noise.
      * 
      * @param gtPose2 current ground-truth pose.
      */
@@ -67,8 +67,17 @@ public class SimulatedOdometry {
         return positions;
     }
 
-    /** 1% noise */
     private double noise(double t) {
+        return zero(t);
+        // return onePercent(t);
+    }
+
+    private double zero(double t) {
+        return 0;
+    }
+
+    /** 1% noise */
+    private double onePercent(double t) {
         return t * RANDOM.nextGaussian(0, 0.01);
     }
 }
