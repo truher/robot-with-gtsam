@@ -106,10 +106,10 @@ public class CustomFactorTest {
 
         shared_ptr<BetweenFactorPose2> bf = BetweenFactorPose2.newBetweenFactorPose2(
                 new Key(0), new Key(1), expected, noise_model);
-        GaussianFactor gf = cf.get().linearize(v);
-        GaussianFactor gf_b = bf.get().linearize(v);
-        Pair<Matrix, Vector> gfj = gf.jacobian();
-        Pair<Matrix, Vector> gf_bj = gf_b.jacobian();
+        shared_ptr<GaussianFactor> gf = cf.get().linearize(v);
+        shared_ptr<GaussianFactor> gf_b = bf.get().linearize(v);
+        Pair<Matrix, Vector> gfj = gf.get().jacobian();
+        Pair<Matrix, Vector> gf_bj = gf_b.get().jacobian();
         Matrix J_cf = gfj.first;
         Vector b_cf = gfj.second;
         Matrix J_bf = gf_bj.first;

@@ -21,7 +21,6 @@ public class SimulatedRobot {
     private static double PAN_SCALE_RAD = 0.5;
 
     public SimulatedRobot() {
-
     }
 
     /**

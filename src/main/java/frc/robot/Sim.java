@@ -15,15 +15,18 @@ import gtsam.Key;
 import gtsam.Point2;
 import gtsam.Point3;
 import gtsam.Pose2;
+import gtsam.Vector1;
 import gtsam.Vector3;
 import gtsam.noiseModel.Diagonal;
 import kinodynamics.Kinematics.SwerveModulePositions;
+import pose_estimator.BetweenGyro;
 import pose_estimator.Gyro;
 import pose_estimator.Odometry;
 import pose_estimator.Prior;
 import pose_estimator.Solver;
 import pose_estimator.Vision;
 import simulation.SimulatedCamera;
+import simulation.SimulatedGyro;
 import simulation.SimulatedOdometry;
 import simulation.SimulatedRobot;
 import util.Geometry;
@@ -32,6 +35,7 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
+    private static final boolean NEW_GYRO = false;
     private final Solver m_solver;
     private final Field2d m_field;
     private final List<Point3> m_landmarks;
@@ -40,10 +44,12 @@ public class Sim {
     private final SimulatedOdometry m_simulatedOdometry;
     private final SimulatedRobot m_simulatedRobot;
     private final SimulatedCamera m_simulatedCamera;
+    private final SimulatedGyro m_simulatedGyro;
 
     // factors
     private final Vision m_vision;
     private final Gyro m_gyro;
+    private final BetweenGyro m_betweenGyro;
     private final Odometry m_odometry;
     private final Prior m_prior;
     private final boolean m_initialized;
@@ -65,10 +71,12 @@ public class Sim {
         SimulatedRobot simulatedRobot = null;
         SimulatedOdometry simulatedOdometry = null;
         SimulatedCamera simulatedCamera = null;
+        SimulatedGyro simulatedGyro = null;
 
         // FACTORS
         Vision vision = null;
         Gyro gyro = null;
+        BetweenGyro betweenGyro = null;
         Odometry odometry = null;
         Prior prior = null;
 
@@ -101,23 +109,28 @@ public class Sim {
             simulatedRobot = new SimulatedRobot();
             Pose2d initial = simulatedRobot.pose(0);
             simulatedCamera = new SimulatedCamera(landmarks, conf);
+            simulatedGyro = new SimulatedGyro(NEW_GYRO);
 
             //
             // FACTORS
             //
             vision = new Vision(solver, conf);
             gyro = new Gyro(solver);
+            betweenGyro = new BetweenGyro(solver);
             odometry = new Odometry(solver);
             prior = new Prior(solver);
 
-            // Add initial variable.
-            Pose2 initialPose = new Pose2(0, 0, 0);
-            solver.addVariable(0, initialPose);
+            // Initial pose.
+            Pose2 p0 = new Pose2(0, 0, 0);
+            Key x0 = Key.X(0);
+            solver.addVariable(x0, 0, p0);
+            prior.add(x0, p0, Diagonal.Sigmas(new Vector3(10, 10, 10)));
 
-            // Add a very loose prior for the initial state,
-            // to keep the solver happy.
-            prior.add(0, initialPose,
-                    Diagonal.Sigmas(new Vector3(10, 10, 10)));
+            // Initial gyro bias.
+            Key b0 = Key.B(0);
+            solver.addVariable(b0, 0, 0);
+            prior.add(b0, 0, Diagonal.Sigmas(new Vector1(1)));
+            betweenGyro.add(0, simulatedGyro.yaw(0, initial));
 
             // Record the initial timestamp and positions.
             simulatedOdometry = new SimulatedOdometry(fieldMap, initial);
@@ -135,11 +148,13 @@ public class Sim {
         m_landmarks = landmarks;
         // simulated measurements
         m_simulatedCamera = simulatedCamera;
+        m_simulatedGyro = simulatedGyro;
         m_simulatedRobot = simulatedRobot;
         m_simulatedOdometry = simulatedOdometry;
         // factors
         m_vision = vision;
         m_gyro = gyro;
+        m_betweenGyro = betweenGyro;
         m_odometry = odometry;
         m_prior = prior;
         SmartDashboard.putData("Field", m_field);
@@ -162,27 +177,43 @@ public class Sim {
             Pose2d groundTruthPose = m_simulatedRobot.pose(t1_us);
             m_field.getObject("gt").setPose(groundTruthPose);
 
-            // Initial value is the previous estimate.
-            m_solver.addVariable(t1_us, m_estimatedPose);
+            // System.out.println("==> Initial value is the previous estimate.");
+            Key x1 = Key.X(t1_us);
+            m_solver.addVariable(x1, t1_us, m_estimatedPose);
 
+            // System.out.println("==> Add odometry factors.");
             applyOdometry(t1_us, groundTruthPose);
 
-            applyGyro(t1_us, groundTruthPose);
+            // System.out.println("==> Add gyro factors.");
+            if (NEW_GYRO) {
+                applyBetweenGyro(t1_us, groundTruthPose);
+            } else {
+                applyGyro(t1_us, groundTruthPose);
+            }
 
+            // System.out.println("==> Add camera factors.");
             applyCamera(t1_us, groundTruthPose);
 
-            // Run the solver
+            // System.out.println("==> Run the solver.");
             m_solver.update();
 
-            // Log a little about the iteration.
+            // System.out.println("==> Log a little about the iteration.");
             logET(t0_ns);
 
-            // Update the estimated pose.
-            m_estimatedPose = m_solver.mean_pose2(Key.X(t1_us));
+            // System.out.println("==> Retrieve the estimated pose.");
+            m_estimatedPose = m_solver.mean_pose2(x1);
 
-            // Show the estimate, errors, and samples on the dashboard.
+            // System.out.println("==> Show the estimate, and errors.");
             plotEstimatedPose(groundTruthPose);
+            // System.out.println("==> Show samples on the field.");
             plotSamples(t1_us);
+
+            // System.out.println("==> Show the estimated bias.");
+
+            if (NEW_GYRO) {
+                double b = m_solver.mean_double(Key.B(t1_us));
+                SmartDashboard.putNumber("bias", b);
+            }
 
             ++m_loopCount;
         } catch (Throwable e) {
@@ -231,7 +262,15 @@ public class Sim {
     }
 
     private void applyGyro(long t1_us, Pose2d gtPose2d) throws Throwable {
-        m_gyro.add(t1_us, gtPose2d.getRotation().getRadians());
+        double measurement = m_simulatedGyro.yaw(t1_us, gtPose2d);
+        m_gyro.add(t1_us, measurement);
+    }
+
+    private void applyBetweenGyro(long t1_us, Pose2d gtPose2d) throws Throwable {
+        double measurement = m_simulatedGyro.yaw(t1_us, gtPose2d);
+        Key b = Key.B(t1_us);
+        m_solver.addVariable(b, t1_us, 0);
+        m_betweenGyro.add(t1_us, measurement);
     }
 
     private void applyOdometry(long t1_us, Pose2d gtPose2d) throws Throwable {

@@ -20,18 +20,19 @@ public class Prior {
         estimate = e;
     }
 
-    /**
-     * Add a prior. Can have wide noise model (when we really don't know)
-     * or narrow (for resetting) or mixed (to reset rotation alone)
-     * 
-     * @param value is copied, ok to delete
-     */
     public void add(
-            long time_us,
+            Key key,
             Pose2 value,
             shared_ptr<? extends Base> noise) throws Throwable {
         estimate.add(PriorFactor.PriorFactorPose2(
-                Key.X(time_us), value, noise));
+                key, value, noise));
     }
 
+    public void add(
+            Key key,
+            double value,
+            shared_ptr<? extends Base> noise) throws Throwable {
+        estimate.add(PriorFactor.PriorFactorDouble(
+                key, value, noise));
+    }
 }

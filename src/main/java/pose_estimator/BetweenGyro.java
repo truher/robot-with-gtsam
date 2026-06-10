@@ -2,6 +2,7 @@ package pose_estimator;
 
 import gtsam.Key;
 import gtsam.PlanarGyroFactor;
+import gtsam.PlanarGyroFactor.PlanarGyroBiasFactor;
 import gtsam.PlanarGyroFactor.PlanarGyroParams;
 import gtsam.Rot2;
 import gtsam.shared_ptr;
@@ -27,9 +28,10 @@ public class BetweenGyro {
     }
 
     /**
-     * Add a PlanarGyro Factor for the measurement.
+     * Add a PlanarGyroFactor for the pose, X(n).
+     * Add PlanarGyroBiasFactor for the bias, B(n).
      * 
-     * Remember to add the bias (Key.B) to the model.
+     * Remember to add the bias (Key.B) variable.
      */
     public void add(long t1_us, double yaw) throws Throwable {
         if (t0_us == null) {
@@ -45,9 +47,14 @@ public class BetweenGyro {
         Rot2 dr = new Rot2(yaw - m_yaw);
 
         shared_ptr<PlanarGyroFactor> x = PlanarGyroFactor.FromRotation(//
-                Key.P(t0_us), Key.P(t1_us), Key.B(t0_us), params, dr, dt);
+                Key.X(t0_us), Key.X(t1_us), Key.B(t0_us), params, dr, dt);
 
         estimate.add(x);
+
+        shared_ptr<PlanarGyroBiasFactor> b = PlanarGyroBiasFactor.makeSharedPlanarGyroBiasFactor(//
+                Key.B(t0_us), Key.B(t1_us), params);
+
+        estimate.add(b);
 
         m_yaw = yaw;
         t0_us = t1_us;
