@@ -15,6 +15,7 @@ import gtsam.Key;
 import gtsam.Point2;
 import gtsam.Point3;
 import gtsam.Pose2;
+import gtsam.Vector;
 import gtsam.Vector1;
 import gtsam.Vector3;
 import gtsam.noiseModel.Diagonal;
@@ -35,7 +36,10 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
+    private static final boolean USE_GYRO = false;
     private static final boolean NEW_GYRO = true;
+    private static final boolean USE_ODO = true;
+    private static final boolean USE_VISION = false;
     private final Solver m_solver;
     private final Field2d m_field;
     private final List<Point3> m_landmarks;
@@ -127,15 +131,21 @@ public class Sim {
             prior.add(x0, p0, Diagonal.Sigmas(new Vector3(100, 100, 100)));
 
             // Initial gyro bias.
-            Key b0 = Key.B(0);
-            solver.addVariable(b0, 0, 0);
-            // try a very low bias prior
-            prior.add(b0, 0, Diagonal.Sigmas(new Vector1(0.001)));
-            betweenGyro.add(0, simulatedGyro.yaw(0, initial));
+            if (USE_GYRO) {
+                if (NEW_GYRO) {
+                    Key b0 = Key.B(0);
+                    solver.addVariable(b0, 0, 0);
+                    // try a very low bias prior
+                    prior.add(b0, 0, Diagonal.Sigmas(new Vector1(0.001)));
+                    betweenGyro.add(0, simulatedGyro.yaw(0, initial));
+                }
+            }
 
             // Record the initial timestamp and positions.
             simulatedOdometry = new SimulatedOdometry(fieldMap, initial);
-            odometry.add(0, simulatedOdometry.positions(initial));
+            if (USE_ODO) {
+                odometry.add(0, simulatedOdometry.positions(initial));
+            }
 
             initialized = true;
         } catch (Throwable e) {
@@ -183,18 +193,23 @@ public class Sim {
             m_solver.addVariable(x1, t1_us, m_estimatedPose);
 
             // System.out.println("==> Add odometry factors.");
-            applyOdometry(t1_us, groundTruthPose);
+            if (USE_ODO) {
+                applyOdometry(t1_us, groundTruthPose);
+            }
 
             // System.out.println("==> Add gyro factors.");
-            if (NEW_GYRO) {
-                applyBetweenGyro(t1_us, groundTruthPose);
-            } else {
-                applyGyro(t1_us, groundTruthPose);
+            if (USE_GYRO) {
+                if (NEW_GYRO) {
+                    applyBetweenGyro(t1_us, groundTruthPose);
+                } else {
+                    applyGyro(t1_us, groundTruthPose);
+                }
             }
 
             // System.out.println("==> Add camera factors.");
-            applyCamera(t1_us, groundTruthPose);
-
+            if (USE_VISION) {
+                applyCamera(t1_us, groundTruthPose);
+            }
             // System.out.println("==> Run the solver.");
             m_solver.update();
 
@@ -211,11 +226,24 @@ public class Sim {
 
             // System.out.println("==> Show the estimated bias.");
 
-            if (NEW_GYRO) {
-                double b = m_solver.mean_double(Key.B(t1_us));
-                SmartDashboard.putNumber("bias", b);
+            if (USE_GYRO) {
+                if (NEW_GYRO) {
+                    double b = m_solver.mean_double(Key.B(t1_us));
+                    SmartDashboard.putNumber("bias", b);
+                }
             }
 
+            Vector poseSigma = m_solver.sigma_pose2(x1);
+            SmartDashboard.putNumber("pose sigma x (m)", poseSigma.at(0));
+            SmartDashboard.putNumber("pose sigma y (m)", poseSigma.at(1));
+            SmartDashboard.putNumber("pose sigma (rad)", poseSigma.at(2));
+
+            if (USE_GYRO) {
+                if (NEW_GYRO) {
+                    Vector biasSigma = m_solver.sigma_pose2(Key.B(t1_us));
+                    SmartDashboard.putNumber("bias sigma (rad)", biasSigma.at(0));
+                }
+            }
             ++m_loopCount;
         } catch (Throwable e) {
             e.printStackTrace();
