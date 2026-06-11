@@ -1,8 +1,7 @@
 package pose_estimator;
 
+import gtsam.BatchFixedLagSmoother;
 import gtsam.FixedLagSmoother;
-import gtsam.ISAM2Params;
-import gtsam.IncrementalFixedLagSmoother;
 import gtsam.Key;
 import gtsam.KeyVector;
 import gtsam.Marginals;
@@ -19,8 +18,8 @@ import gtsam.shared_ptr;
  * Port of estimate.py from 2024.
  */
 public class Solver {
-    // private final BatchFixedLagSmoother isam;
-    private final IncrementalFixedLagSmoother isam;
+    private final BatchFixedLagSmoother isam;
+    // private final IncrementalFixedLagSmoother isam;
     private final NonlinearFactorGraph new_factors;
     private final Values new_values;
     /** key is Key, "X(timestamp in us)", value is timestamp in us */
@@ -35,12 +34,12 @@ public class Solver {
         // TODO: some other initial positions?
 
         // Batch solver
-        // isam = new BatchFixedLagSmoother(lag);
+        isam = new BatchFixedLagSmoother(lag);
 
         // Incremental solver
-        ISAM2Params isam2Params = new ISAM2Params();
-        isam2Params.findUnusedFactorSlots(true);
-        isam = new IncrementalFixedLagSmoother(lag, isam2Params);
+        // ISAM2Params isam2Params = new ISAM2Params();
+        // isam2Params.findUnusedFactorSlots(true);
+        // isam = new IncrementalFixedLagSmoother(lag, isam2Params);
 
         result = new Values();
         // between updates we accumulate inputs here
