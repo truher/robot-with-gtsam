@@ -14,16 +14,18 @@ public class SimulatedGyro {
 
     public SimulatedGyro(boolean drift) {
         if (drift) {
-            m_drift = 0;
-            // m_drift = 1e-3;
+            // This is for troubleshooting.
+            // m_drift = 0;
+            // This is a high drift level: 1e-3 radians per second.  The earth rotates about 7e-5 rad/s
+            m_drift = 1e-3;
         } else {
             m_drift = 0;
         }
     }
 
     public double yaw(double t_us, Pose2d gtPose2d) {
-        return gt(t_us, gtPose2d);
-        // return noisy(t_us, gtPose2d);
+        // return gt(t_us, gtPose2d);
+        return noisy(t_us, gtPose2d);
     }
 
     private double gt(double t_us, Pose2d gtPose2d) {

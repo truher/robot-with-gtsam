@@ -98,7 +98,10 @@ public class Odometry {
 
     /** Speed-dependent noise. */
     private double noise(double distance) {
-        return 0.0001 + 0.02 * distance;
+        // This seems like a reasonable noise level.
+        // return 0.0001 + 0.02 * distance;
+        // This is high noise to make the demo look better.
+        return 0.1 + 0.1 * distance;
     }
 
 }

@@ -36,10 +36,10 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private static final boolean USE_GYRO = false;
+    private static final boolean USE_GYRO = true;
     private static final boolean NEW_GYRO = true;
     private static final boolean USE_ODO = true;
-    private static final boolean USE_VISION = false;
+    private static final boolean USE_VISION = true;
     private final Solver m_solver;
     private final Field2d m_field;
     private final List<Point3> m_landmarks;
@@ -55,18 +55,22 @@ public class Sim {
     private final Gyro m_gyro;
     private final BetweenGyro m_betweenGyro;
     private final Odometry m_odometry;
-    // private final Prior m_prior;
+    private final Prior m_prior;
     private final boolean m_initialized;
 
+    private Pose2d m_groundTruthPose;
     /** Estimate from the solver. */
     private Pose2 m_estimatedPose;
+    private Vector m_poseSigma;
     private int m_loopCount;
 
     // the verbosity here is to trap the exception.
     public Sim() {
 
         Solver solver = null;
+        Pose2d groundTruthPose = null;
         Pose2 estimatedPose = null;
+        Vector poseSigma = null;
         boolean initialized = false;
         List<Point3> landmarks = null;
         CameraConfig conf = null;
@@ -91,7 +95,9 @@ public class Sim {
             int lagMicroseconds = 100000;
             solver = new Solver(lagMicroseconds);
 
+            groundTruthPose = new Pose2d();
             estimatedPose = new Pose2();
+            poseSigma = new Vector(3);
 
             //
             // LANDMARKS
@@ -135,8 +141,8 @@ public class Sim {
                 if (NEW_GYRO) {
                     Key b0 = Key.B(0);
                     solver.addVariable(b0, 0, 0);
-                    // try a very low bias prior
-                    prior.add(b0, 0, Diagonal.Sigmas(new Vector1(0.001)));
+                    // This is a very wide bias prior.
+                    prior.add(b0, 0, Diagonal.Sigmas(new Vector1(1)));
                     betweenGyro.add(0, simulatedGyro.yaw(0, initial));
                 }
             }
@@ -153,7 +159,9 @@ public class Sim {
         }
 
         m_solver = solver;
+        m_groundTruthPose = groundTruthPose;
         m_estimatedPose = estimatedPose;
+        m_poseSigma = poseSigma;
         m_field = field;
         m_loopCount = 1;
         m_landmarks = landmarks;
@@ -167,7 +175,7 @@ public class Sim {
         m_gyro = gyro;
         m_betweenGyro = betweenGyro;
         m_odometry = odometry;
-        // m_prior = prior;
+        m_prior = prior;
         SmartDashboard.putData("Field", m_field);
         m_initialized = initialized;
     }
@@ -185,8 +193,8 @@ public class Sim {
             long t1_us = 20000 * m_loopCount;
 
             // Compute ground truth and plot it.
-            Pose2d groundTruthPose = m_simulatedRobot.pose(t1_us);
-            m_field.getObject("gt").setPose(groundTruthPose);
+            m_groundTruthPose = m_simulatedRobot.pose(t1_us);
+            m_field.getObject("gt").setPose(m_groundTruthPose);
 
             // System.out.println("==> Initial value is the previous estimate.");
             Key x1 = Key.X(t1_us);
@@ -194,22 +202,23 @@ public class Sim {
 
             // System.out.println("==> Add odometry factors.");
             if (USE_ODO) {
-                applyOdometry(t1_us, groundTruthPose);
+                applyOdometry(t1_us, m_groundTruthPose);
             }
 
             // System.out.println("==> Add gyro factors.");
             if (USE_GYRO) {
                 if (NEW_GYRO) {
-                    applyBetweenGyro(t1_us, groundTruthPose);
+                    applyBetweenGyro(t1_us, m_groundTruthPose);
                 } else {
-                    applyGyro(t1_us, groundTruthPose);
+                    applyGyro(t1_us, m_groundTruthPose);
                 }
             }
 
             // System.out.println("==> Add camera factors.");
             if (USE_VISION) {
-                applyCamera(t1_us, groundTruthPose);
+                applyCamera(t1_us, m_groundTruthPose);
             }
+
             // System.out.println("==> Run the solver.");
             m_solver.update();
 
@@ -220,7 +229,7 @@ public class Sim {
             m_estimatedPose = m_solver.mean_pose2(x1);
 
             // System.out.println("==> Show the estimate, and errors.");
-            plotEstimatedPose(groundTruthPose);
+            plotEstimatedPose(m_groundTruthPose);
             // System.out.println("==> Show samples on the field.");
             plotSamples(t1_us);
 
@@ -233,10 +242,10 @@ public class Sim {
                 }
             }
 
-            Vector poseSigma = m_solver.sigma_pose2(x1);
-            SmartDashboard.putNumber("pose sigma x (m)", poseSigma.at(0));
-            SmartDashboard.putNumber("pose sigma y (m)", poseSigma.at(1));
-            SmartDashboard.putNumber("pose sigma (rad)", poseSigma.at(2));
+            m_poseSigma = m_solver.sigma_pose2(x1);
+            SmartDashboard.putNumber("pose sigma x (m)", m_poseSigma.at(0));
+            SmartDashboard.putNumber("pose sigma y (m)", m_poseSigma.at(1));
+            SmartDashboard.putNumber("pose sigma (rad)", m_poseSigma.at(2));
 
             if (USE_GYRO) {
                 if (NEW_GYRO) {
@@ -248,6 +257,18 @@ public class Sim {
         } catch (Throwable e) {
             e.printStackTrace();
         }
+    }
+
+    public Pose2d groundTruthPose() {
+        return m_groundTruthPose;
+    }
+
+    public Pose2 estimatedPose() {
+        return m_estimatedPose;
+    }
+
+    public Vector poseSigma() {
+        return m_poseSigma;
     }
 
     /** Plot the estimated pose and the error from ground truth. */
@@ -312,6 +333,8 @@ public class Sim {
         List<Point2> measurements = m_simulatedCamera.pixels(gtPose2d);
         if (m_landmarks.size() != measurements.size())
             return;
+        // try one point only, for debugging.
+        // m_vision.add(t1_us, m_landmarks.get(0), measurements.get(0));
         for (int i = 0; i < m_landmarks.size(); ++i) {
             Point3 landmark = m_landmarks.get(i);
             Point2 measurement = measurements.get(i);

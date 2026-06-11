@@ -72,8 +72,10 @@ public class SimulatedCamera {
     }
 
     private Point2 noise() throws Throwable {
-        return zeroNoise();
-        // return uniformNoise();
+        // This is for troubleshooting
+        // return zeroNoise();
+        // This is a reasonable noise level: +/- one pixel.
+        return uniformNoise();
     }
 
     private Point2 zeroNoise() throws Throwable {

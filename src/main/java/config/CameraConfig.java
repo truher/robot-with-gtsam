@@ -21,5 +21,7 @@ public class CameraConfig {
                         0, -1, 0),
                 new Point3(0, 0, 0.5));
         calib = new Cal3DS2(200.0, 200.0, 0.0, 400.0, 300.0, -0.2, 0.1);
+        // undistorted
+        // calib = new Cal3DS2(200.0, 200.0, 0.0, 400.0, 300.0, 0, 0);
     }
 }

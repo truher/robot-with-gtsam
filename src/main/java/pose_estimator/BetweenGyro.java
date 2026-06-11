@@ -9,11 +9,15 @@ import gtsam.shared_ptr;
 
 /** Gyro that uses PlanarGyroFactor. */
 public class BetweenGyro {
-    // std dev of "angle random walk" noise
-    private static final double ARW_SIGMA = 1e-4;
+    // Std dev of "angle random walk" noise
+    // This is a reasonable number.
+    // private static final double ARW_SIGMA = 1e-4;
+    // This is a very high sigma, to make the demo look better.
+    private static final double ARW_SIGMA = 1e-2;
 
-    // std dev of bias instability
-    private static final double BIAS_INSTABILITY_SIGMA = 3e-5;
+    // Std dev of bias instability
+    // This is a pretty low number, not sure what it should really be, maybe 3e-5?
+    private static final double BIAS_INSTABILITY_SIGMA = 1e-6;
 
     private final Solver estimate;
     private final shared_ptr<PlanarGyroParams> params;

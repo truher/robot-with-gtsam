@@ -12,7 +12,8 @@ public class SimulatedRobot {
     /** x center of the circle, meters */
     private static double CX = 4;
     /** y center of the circle, meters */
-    private static double CY = 4;
+    // off-center makes it harder or maybe easier?
+    private static double CY = 5;
     /** circle radius, meters */
     private static double RADIUS = 2;
     private static double PATH_PERIOD_S = 2.0 * Math.PI;
@@ -28,10 +29,11 @@ public class SimulatedRobot {
      * @return robot pose
      */
     public Pose2d pose(long t1_us) {
-        return justCircle(t1_us);
+        // For troubleshooting.
+        // return justCircle(t1_us);
         // return justPan(t1_us);
         // return stationary(t1_us);
-        // return circleAndPan(t1_us);
+        return circleAndPan(t1_us);
     }
 
     private Pose2d justCircle(long t1_us) {

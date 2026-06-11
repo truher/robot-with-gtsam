@@ -68,8 +68,10 @@ public class SimulatedOdometry {
     }
 
     private double noise(double t) {
-        return zero(t);
-        // return onePercent(t);
+        // For troubleshooting
+        // return zero(t);
+        // A reasonable guess, 1% noise.  Should be nonlinear with speed.
+        return onePercent(t);
     }
 
     private double zero(double t) {
