@@ -18,6 +18,7 @@ import gtsam.Pose2;
 import gtsam.Vector;
 import gtsam.Vector1;
 import gtsam.Vector3;
+import gtsam.shared_ptr;
 import gtsam.noiseModel.Diagonal;
 import kinodynamics.Kinematics.SwerveModulePositions;
 import pose_estimator.BetweenGyro;
@@ -131,10 +132,18 @@ public class Sim {
             prior = new Prior(solver);
 
             // Initial pose.
-            Pose2 p0 = new Pose2(0, 0, 0);
+            // Pose2 p0 = new Pose2(0, 0, 0);
+            
+            // Cheat: use the real ground truth pose as the initial pose
+            Pose2 p0 = Geometry.toPose2(initial);
             Key x0 = Key.X(0);
             solver.addVariable(x0, 0, p0);
-            prior.add(x0, p0, Diagonal.Sigmas(new Vector3(100, 100, 100)));
+            // Very uncertain prior, let the solver figure it out.
+            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(100, 100,
+            // 100));
+            // Very tight prior to help the solver.
+            shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1, 0.1));
+            prior.add(x0, p0, priorNoise);
 
             // Initial gyro bias.
             if (USE_GYRO) {
@@ -198,7 +207,11 @@ public class Sim {
 
             // System.out.println("==> Initial value is the previous estimate.");
             Key x1 = Key.X(t1_us);
-            m_solver.addVariable(x1, t1_us, m_estimatedPose);
+            // m_solver.addVariable(x1, t1_us, m_estimatedPose);
+
+            // Cheat by setting the initial value to the true value.
+            // This makes the incremental solver work.
+            m_solver.addVariable(x1, t1_us, Geometry.toPose2(m_groundTruthPose));
 
             // System.out.println("==> Add odometry factors.");
             if (USE_ODO) {
