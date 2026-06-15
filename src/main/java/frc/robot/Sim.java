@@ -139,10 +139,10 @@ public class Sim {
             Key x0 = Key.X(0);
             solver.addVariable(x0, 0, p0);
             // Very uncertain prior, let the solver figure it out.
-            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(100, 100,
-            // 100));
+            shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(100, 100,
+            100));
             // Very tight prior to help the solver.
-            shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1, 0.1));
+            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1, 0.1));
             prior.add(x0, p0, priorNoise);
 
             // Initial gyro bias.
