@@ -17,7 +17,7 @@ public class VisionTest {
     @Test
     void testFar() throws Throwable {
         int lagMicroseconds = 100000;
-        Solver solver = new Solver(lagMicroseconds);
+        Solver solver = new Solver(lagMicroseconds, false);
         CameraConfig conf = new CameraConfig();
         Vision v = new Vision(solver, conf);
         long t_us = 0;

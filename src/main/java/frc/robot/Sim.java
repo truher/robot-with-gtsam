@@ -66,7 +66,7 @@ public class Sim {
     private int m_loopCount;
 
     // the verbosity here is to trap the exception.
-    public Sim() {
+    public Sim(boolean incremental) {
 
         Solver solver = null;
         Pose2d groundTruthPose = null;
@@ -94,7 +94,7 @@ public class Sim {
         try {
 
             int lagMicroseconds = 100000;
-            solver = new Solver(lagMicroseconds);
+            solver = new Solver(lagMicroseconds, incremental);
 
             groundTruthPose = new Pose2d();
             estimatedPose = new Pose2();
@@ -132,10 +132,10 @@ public class Sim {
             prior = new Prior(solver);
 
             // Initial pose.
-            // Pose2 p0 = new Pose2(0, 0, 0);
+            Pose2 p0 = new Pose2(0, 0, 0);
             
             // Cheat: use the real ground truth pose as the initial pose
-            Pose2 p0 = Geometry.toPose2(initial);
+            // Pose2 p0 = Geometry.toPose2(initial);
             Key x0 = Key.X(0);
             solver.addVariable(x0, 0, p0);
             // Very uncertain prior, let the solver figure it out.
@@ -189,6 +189,10 @@ public class Sim {
         m_initialized = initialized;
     }
 
+    void check_smoother() throws Throwable {
+        m_solver.check_smoother();
+    }
+
     public void run() {
         if (!m_initialized)
             return;
@@ -207,11 +211,11 @@ public class Sim {
 
             // System.out.println("==> Initial value is the previous estimate.");
             Key x1 = Key.X(t1_us);
-            // m_solver.addVariable(x1, t1_us, m_estimatedPose);
+            m_solver.addVariable(x1, t1_us, m_estimatedPose);
 
             // Cheat by setting the initial value to the true value.
             // This makes the incremental solver work.
-            m_solver.addVariable(x1, t1_us, Geometry.toPose2(m_groundTruthPose));
+            // m_solver.addVariable(x1, t1_us, Geometry.toPose2(m_groundTruthPose));
 
             // System.out.println("==> Add odometry factors.");
             if (USE_ODO) {
@@ -296,7 +300,7 @@ public class Sim {
         long t1_ns = System.nanoTime();
         long et_ns = t1_ns - t0_ns;
         SmartDashboard.putNumber("et (ms)", (double) et_ns * 1e-6);
-        SmartDashboard.putNumber("size", m_solver.result_size());
+        // SmartDashboard.putNumber("size", m_solver.result_size());
     }
 
     /**

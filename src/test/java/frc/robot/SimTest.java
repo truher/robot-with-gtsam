@@ -9,21 +9,46 @@ import gtsam.Vector3;
 import util.Geometry;
 
 public class SimTest {
-    /** This should see chirality exceptions for awhile, and then stop.  */
+    /** This should see chirality exceptions for awhile, and then stop. */
     @Test
     void testSim() throws Throwable {
-        Sim sim = new Sim();
+        Sim sim = new Sim(false);
         for (int i = 0; i < 100; ++i) {
             sim.run();
-            Pose2d gt = sim.groundTruthPose();
-            Pose2 gtp2 = Geometry.toPose2(gt);
-            Pose2 p = sim.estimatedPose();
-            Vector3 err = gtp2.local(p);
-            System.out.printf("err (%f %f %f)\n", err.at(0), err.at(1), err.at(2));
-            Vector s = sim.poseSigma();
-            System.out.printf("%d gt (%f %f %f) est (%f %f %f) +/- (%f %f %f\n",
-                    i, gt.getX(), gt.getY(), gt.getRotation().getRadians(),
-                    p.x(), p.y(), p.theta(), s.at(0), s.at(1), s.at(2));
+            print(sim, i);
+        }
+    }
+
+    private void print(Sim sim, int i) throws Throwable {
+        Pose2d gt = sim.groundTruthPose();
+        Pose2 gtp2 = Geometry.toPose2(gt);
+        Pose2 p = sim.estimatedPose();
+        Vector3 err = gtp2.local(p);
+        System.out.printf("err (%f %f %f)\n", err.at(0), err.at(1), err.at(2));
+        Vector s = sim.poseSigma();
+        System.out.printf("%d gt (%f %f %f) est (%f %f %f) +/- (%f %f %f\n",
+                i, gt.getX(), gt.getY(), gt.getRotation().getRadians(),
+                p.x(), p.y(), p.theta(), s.at(0), s.at(1), s.at(2));
+    }
+
+    @Test
+    void testSimOnce() throws Throwable {
+        {
+            Sim sim = new Sim(false);
+            System.out.println("\n=========== BATCH ===========");
+            sim.run();
+            sim.run();
+            sim.run();
+            print(sim, 0);
+        }
+        {
+            Sim sim = new Sim(true);
+            System.out.println("\n=========== INCREMENTAL ===========");
+            sim.run();
+            sim.run();
+            sim.run();
+            print(sim, 0);
+            // sim.check_smoother();
         }
     }
 }

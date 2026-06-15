@@ -9,7 +9,7 @@ public class Robot extends TimedRobot {
 
     public Robot() {
         DataLogManager.start();
-        sim = new Sim();
+        sim = new Sim(false);
     }
 
     @Override

@@ -14,7 +14,7 @@ public class SolverTest {
 
     @Test
     void testAddFactor() throws Throwable {
-        Solver solver = new Solver(100000);
+        Solver solver = new Solver(100000, false);
         // The key does not exist.
         Key key = new Key(1);
         assertFalse(solver.add(PriorFactor.PriorFactorDouble(
