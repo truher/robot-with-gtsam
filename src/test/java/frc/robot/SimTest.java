@@ -37,18 +37,14 @@ public class SimTest {
             Sim sim = new Sim(false);
             System.out.println("\n=========== BATCH ===========");
             sim.run();
-            sim.run();
-            sim.run();
             print(sim, 0);
         }
         {
             Sim sim = new Sim(true);
             System.out.println("\n=========== INCREMENTAL ===========");
             sim.run();
-            sim.run();
-            sim.run();
             print(sim, 0);
-            // sim.check_smoother();
+            sim.check_smoother();
         }
     }
 }

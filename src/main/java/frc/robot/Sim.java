@@ -37,9 +37,9 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private static final boolean USE_GYRO = true;
+    private static final boolean USE_GYRO = false;
     private static final boolean NEW_GYRO = true;
-    private static final boolean USE_ODO = true;
+    private static final boolean USE_ODO = false;
     private static final boolean USE_VISION = true;
     private final Solver m_solver;
     private final Field2d m_field;
@@ -133,16 +133,17 @@ public class Sim {
 
             // Initial pose.
             Pose2 p0 = new Pose2(0, 0, 0);
-            
+
             // Cheat: use the real ground truth pose as the initial pose
             // Pose2 p0 = Geometry.toPose2(initial);
             Key x0 = Key.X(0);
             solver.addVariable(x0, 0, p0);
             // Very uncertain prior, let the solver figure it out.
             shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(100, 100,
-            100));
+                    100));
             // Very tight prior to help the solver.
-            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1, 0.1));
+            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1,
+            // 0.1));
             prior.add(x0, p0, priorNoise);
 
             // Initial gyro bias.
@@ -212,6 +213,13 @@ public class Sim {
             // System.out.println("==> Initial value is the previous estimate.");
             Key x1 = Key.X(t1_us);
             m_solver.addVariable(x1, t1_us, m_estimatedPose);
+
+            shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(100, 100,
+                    100));
+            // Very tight prior to help the solver.
+            // shared_ptr<Diagonal> priorNoise = Diagonal.Sigmas(new Vector3(0.1, 0.1,
+            // 0.1));
+            m_prior.add(x1, m_estimatedPose, priorNoise);
 
             // Cheat by setting the initial value to the true value.
             // This makes the incremental solver work.

@@ -139,11 +139,11 @@ public class Solver {
         // new_values.print("new values");
         if (INCREMENTAL) {
             Result updateResult = incrementalSmoother.update(new_factors, new_values, new_timestamps);
-            // updateResult.print();
+            updateResult.print();
             result = incrementalSmoother.calculateEstimate();
         } else {
             Result updateResult = batchSmoother.update(new_factors, new_values, new_timestamps);
-            // updateResult.print();
+            updateResult.print();
             result = batchSmoother.calculateEstimate();
         }
 
