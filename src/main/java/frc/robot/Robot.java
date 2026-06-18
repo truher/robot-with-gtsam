@@ -9,6 +9,8 @@ public class Robot extends TimedRobot {
 
     public Robot() {
         DataLogManager.start();
+        // After experimenting awhile, I think the incremental smoother
+        // is not worth pursuring for 2027.
         sim = new Sim(false);
     }
 

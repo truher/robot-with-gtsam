@@ -138,12 +138,14 @@ public class Solver {
         // new_factors.print("new factors");
         // new_values.print("new values");
         if (INCREMENTAL) {
-            Result updateResult = incrementalSmoother.update(new_factors, new_values, new_timestamps);
-            updateResult.print();
+            incrementalSmoother.update(new_factors, new_values, new_timestamps);
+            // apparently a single update isn't enough.
+            incrementalSmoother.update();
+            incrementalSmoother.update();
+            incrementalSmoother.update();
             result = incrementalSmoother.calculateEstimate();
         } else {
-            Result updateResult = batchSmoother.update(new_factors, new_values, new_timestamps);
-            updateResult.print();
+            batchSmoother.update(new_factors, new_values, new_timestamps);
             result = batchSmoother.calculateEstimate();
         }
 
@@ -154,8 +156,8 @@ public class Solver {
     }
 
     // public long result_size() throws Throwable {
-    //     // result.print();
-    //     return result.size();
+    // // result.print();
+    // return result.size();
     // }
 
     /** The mean expected pose. */

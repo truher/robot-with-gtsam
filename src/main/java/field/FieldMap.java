@@ -12,6 +12,7 @@ import gtsam.Point3;
  */
 public class FieldMap {
     static double TAG_SIZE_M = 0.1651;
+    // static double TAG_SIZE_M = 0.5;
     static double HALF = TAG_SIZE_M / 2;
     // key = tag number
     // value = list of arrays, each array is (x, y)

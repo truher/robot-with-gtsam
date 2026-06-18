@@ -7,7 +7,6 @@ import gtsam.Key;
 import gtsam.Pose2;
 import gtsam.Vector3;
 import gtsam.shared_ptr;
-import gtsam.noiseModel.Base;
 import gtsam.noiseModel.Diagonal;
 import kinodynamics.DriveUtil;
 import kinodynamics.Kinematics;

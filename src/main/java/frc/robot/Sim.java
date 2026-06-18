@@ -37,9 +37,9 @@ import util.Geometry;
  * Outer simulation loop. Call "run" periodically.
  */
 public class Sim {
-    private static final boolean USE_GYRO = false;
+    private static final boolean USE_GYRO = true;
     private static final boolean NEW_GYRO = true;
-    private static final boolean USE_ODO = false;
+    private static final boolean USE_ODO = true;
     private static final boolean USE_VISION = true;
     private final Solver m_solver;
     private final Field2d m_field;
